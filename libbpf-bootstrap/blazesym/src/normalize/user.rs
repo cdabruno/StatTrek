@@ -23,29 +23,6 @@ use super::meta::UserMeta;
 use super::normalizer::Output;
 
 
-pub(crate) fn create_apk_elf_path(apk: &Path, elf: &Path) -> Result<PathBuf> {
-    let mut extension = apk
-        .extension()
-        .unwrap_or_else(|| OsStr::new("apk"))
-        .to_os_string();
-    // Append '!' to indicate separation from archive internal contents
-    // that follow. This is an Android convention.
-    let () = extension.push("!");
-
-    let mut apk = apk.to_path_buf();
-    if !apk.set_extension(extension) {
-        return Err(Error::new(
-            ErrorKind::InvalidInput,
-            format!("path {} is not valid", apk.display()),
-        )
-        .into())
-    }
-
-    let path = apk.join(elf);
-    Ok(path)
-}
-
-
 /// Make a [`UserMeta::Elf`] variant.
 fn make_elf_meta(entry: &PathMapsEntry, get_build_id: &BuildIdFn) -> Result<UserMeta> {
     let elf = Elf {
@@ -124,9 +101,9 @@ impl UserOutput {
 }
 
 
-pub(crate) trait Handler {
+pub(crate) trait Handler<D = ()> {
     /// Handle an unknown address.
-    fn handle_unknown_addr(&mut self, addr: Addr) -> Result<()>;
+    fn handle_unknown_addr(&mut self, addr: Addr, data: D) -> Result<()>;
 
     /// Handle an address residing in the provided [`PathMapsEntry`].
     fn handle_entry_addr(&mut self, addr: Addr, entry: &PathMapsEntry) -> Result<()>;
@@ -161,12 +138,12 @@ impl<R> NormalizationHandler<R> {
     }
 }
 
-impl<R> Handler for NormalizationHandler<R>
+impl<R> Handler<()> for NormalizationHandler<R>
 where
     R: BuildIdReader,
 {
     #[cfg_attr(feature = "tracing", crate::log::instrument(skip_all, fields(addr = format_args!("{addr:#x}"))))]
-    fn handle_unknown_addr(&mut self, addr: Addr) -> Result<()> {
+    fn handle_unknown_addr(&mut self, addr: Addr, (): ()) -> Result<()> {
         self.unknown_idx = self.normalized.add_unknown_addr(addr, self.unknown_idx);
         Ok(())
     }
@@ -196,15 +173,17 @@ where
 }
 
 
-pub(crate) fn normalize_sorted_user_addrs_with_entries<A, E, H>(
+pub(crate) fn normalize_sorted_user_addrs_with_entries<A, E, H, D>(
     addrs: A,
     entries: E,
     mut handler: H,
+    data: D,
 ) -> Result<H>
 where
     A: ExactSizeIterator<Item = Addr> + Clone,
     E: Iterator<Item = Result<maps::MapsEntry>>,
-    H: Handler,
+    H: Handler<D>,
+    D: Clone,
 {
     let mut entries = entries.filter_map(|result| match result {
         Ok(entry) => maps::filter_map_relevant(entry).map(Ok),
@@ -240,7 +219,7 @@ where
                 // cannot normalize. We have to assume that addresses
                 // were valid and the ELF object was just unmapped,
                 // similar to above.
-                let () = handler.handle_unknown_addr(addr)?;
+                let () = handler.handle_unknown_addr(addr, data.clone())?;
                 continue 'main
             };
         }
@@ -251,7 +230,7 @@ where
         // happen, for example, if an ELF object was unmapped between
         // address capture and normalization.
         if addr < entry.range.start {
-            let () = handler.handle_unknown_addr(addr)?;
+            let () = handler.handle_unknown_addr(addr, data.clone())?;
             continue 'main
         }
 
@@ -271,13 +250,13 @@ where
 /// normalized), could have a few reasons, including, but not limited
 /// to:
 /// - user error (if a bogus address was provided)
-/// - they belonged to an ELF object that has been unmapped since the
-///   address was captured
+/// - they belonged to an ELF object that has been unmapped since the address
+///   was captured
 ///
 /// The process' ID should be provided in `pid`.
 ///
 /// File offsets are reported in the exact same order in which the
-/// non-normalized addresses ones were provided.
+/// non-normalized addresses were provided.
 pub(super) fn normalize_user_addrs_sorted_impl<A>(
     addrs: A,
     pid: Pid,
@@ -291,12 +270,12 @@ where
 
     if read_build_ids {
         let handler = NormalizationHandler::<DefaultBuildIdReader>::new(addrs_cnt);
-        let handler = normalize_sorted_user_addrs_with_entries(addrs, entries, handler)?;
+        let handler = normalize_sorted_user_addrs_with_entries(addrs, entries, handler, ())?;
         debug_assert_eq!(handler.normalized.outputs.len(), addrs_cnt);
         Ok(handler.normalized)
     } else {
         let handler = NormalizationHandler::<NoBuildIdReader>::new(addrs_cnt);
-        let handler = normalize_sorted_user_addrs_with_entries(addrs, entries, handler)?;
+        let handler = normalize_sorted_user_addrs_with_entries(addrs, entries, handler, ())?;
         debug_assert_eq!(handler.normalized.outputs.len(), addrs_cnt);
         Ok(handler.normalized)
     }
@@ -309,15 +288,6 @@ mod tests {
 
     use test_log::test;
 
-
-    /// Check that we can create a path to an ELF inside an APK as expected.
-    #[test]
-    fn elf_apk_path_creation() {
-        let apk = Path::new("/root/test.apk");
-        let elf = Path::new("subdir/libc.so");
-        let path = create_apk_elf_path(apk, elf).unwrap();
-        assert_eq!(path, Path::new("/root/test.apk!/subdir/libc.so"));
-    }
 
     /// Check that we correctly handle normalization of an address not
     /// in any executable segment.
@@ -338,7 +308,7 @@ mod tests {
 7fd5ba059000-7fd5ba1a8000 r-xp 00022000 00:12 2088876                    /lib64/libc.so.6
 7fd5ba1a8000-7fd5ba1fa000 r--p 00171000 00:12 2088876                    /lib64/libc.so.6
 7fd5ba1fa000-7fd5ba1fe000 r--p 001c3000 00:12 2088876                    /lib64/libc.so.6
-7fd5ba1fe000-7fd5ba200000 rw-p 001c7000 00:12 2088876                    /lib64/libc.so.6
+7fd5ba1fe000-7fd5ba200000 -w-p 001c7000 00:12 2088876                    /lib64/libc.so.6
 7fd5ba200000-7fd5ba208000 rw-p 00000000 00:00 0
 7fd5ba214000-7fd5ba216000 rw-p 00000000 00:00 0
 7fd5ba216000-7fd5ba217000 r--p 00000000 00:12 2088889                    /lib64/ld-linux-x86-64.so.2
@@ -360,6 +330,7 @@ mod tests {
                 addrs.as_slice().iter().copied(),
                 entries,
                 handler,
+                (),
             )
             .unwrap()
             .normalized;

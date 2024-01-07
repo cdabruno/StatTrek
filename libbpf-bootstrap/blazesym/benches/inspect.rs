@@ -18,7 +18,7 @@ fn lookup_elf() {
 
     let inspector = Inspector::new();
     let results = inspector
-        .lookup(black_box(&["abort_creds"]), black_box(&src))
+        .lookup(black_box(&src), black_box(&["abort_creds"]))
         .unwrap()
         .into_iter()
         .flatten()
@@ -39,7 +39,7 @@ fn lookup_dwarf() {
 
     let inspector = Inspector::new();
     let results = inspector
-        .lookup(black_box(&["abort_creds"]), black_box(&src))
+        .lookup(black_box(&src), black_box(&["abort_creds"]))
         .unwrap()
         .into_iter()
         .flatten()
@@ -54,8 +54,6 @@ pub fn benchmark<M>(group: &mut BenchmarkGroup<'_, M>)
 where
     M: Measurement,
 {
-    if cfg!(feature = "generate-large-test-files") {
-        bench_fn!(group, lookup_dwarf);
-        bench_fn!(group, lookup_elf);
-    }
+    bench_fn!(group, lookup_dwarf);
+    bench_fn!(group, lookup_elf);
 }

@@ -1,6 +1,9 @@
+use std::borrow::Cow;
+use std::ffi::OsStr;
 use std::fmt::Debug;
 use std::fmt::Formatter;
 use std::fmt::Result as FmtResult;
+use std::fs::File;
 use std::mem;
 use std::mem::swap;
 use std::path::Path;
@@ -10,8 +13,9 @@ use crate::inspect::FindAddrOpts;
 use crate::inspect::SymInfo;
 use crate::mmap::Mmap;
 use crate::symbolize::AddrCodeInfo;
-use crate::symbolize::FrameCodeInfo;
+use crate::symbolize::CodeInfo;
 use crate::symbolize::IntSym;
+use crate::symbolize::Reason;
 use crate::symbolize::SrcLang;
 use crate::Addr;
 use crate::IntoError as _;
@@ -45,12 +49,22 @@ pub struct GsymResolver<'dat> {
 }
 
 impl GsymResolver<'static> {
-    /// Create a `GsymResolver` that load data from the provided file.
-    pub fn new(file_name: PathBuf) -> Result<Self> {
-        let mmap = Mmap::builder().open(&file_name)?;
+    /// Create a `GsymResolver` that loads data from the provided file.
+    #[cfg(test)]
+    pub fn new(path: PathBuf) -> Result<Self> {
+        let mmap = Mmap::builder().open(&path)?;
+        Self::from_mmap(path, mmap)
+    }
+
+    pub fn from_file(path: PathBuf, file: &File) -> Result<Self> {
+        let mmap = Mmap::map(file)?;
+        Self::from_mmap(path, mmap)
+    }
+
+    fn from_mmap(path: PathBuf, mmap: Mmap) -> Result<Self> {
         let ctx = GsymContext::parse_header(&mmap)?;
         let slf = Self {
-            file_name: Some(file_name),
+            file_name: Some(path),
             // SAFETY: We own the underlying `Mmap` object and never hand out
             //         any 'static references to its data. So it is safe for us
             //         to transmute the lifetime.
@@ -75,7 +89,7 @@ impl<'dat> GsymResolver<'dat> {
         Ok(slf)
     }
 
-    fn query_frame_code_info(&self, file_idx: u32, line: Option<u32>) -> Result<FrameCodeInfo<'_>> {
+    fn query_frame_code_info(&self, file_idx: u32, line: Option<u32>) -> Result<CodeInfo<'_>> {
         let finfo = self
             .ctx
             .file_info(file_idx as usize)
@@ -93,11 +107,12 @@ impl<'dat> GsymResolver<'dat> {
                 format!("failed to retrieve file name string @ {}", finfo.filename)
             })?;
 
-        let info = FrameCodeInfo {
-            dir: Path::new(dir),
-            file,
+        let info = CodeInfo {
+            dir: Some(Cow::Borrowed(Path::new(dir))),
+            file: Cow::Borrowed(OsStr::new(file)),
             line,
             column: None,
+            _non_exhaustive: (),
         };
         Ok(info)
     }
@@ -144,14 +159,14 @@ impl<'dat> GsymResolver<'dat> {
 }
 
 impl SymResolver for GsymResolver<'_> {
-    fn find_sym(&self, addr: Addr) -> Result<Option<IntSym<'_>>> {
+    fn find_sym(&self, addr: Addr) -> Result<Result<IntSym<'_>, Reason>> {
         if let Some(idx) = self.ctx.find_addr(addr) {
             let found = self
                 .ctx
                 .addr_at(idx)
                 .ok_or_invalid_data(|| format!("failed to read address table entry {idx}"))?;
             if addr < found {
-                return Ok(None)
+                return Ok(Err(Reason::UnknownAddr))
             }
 
             let info = self
@@ -174,9 +189,9 @@ impl SymResolver for GsymResolver<'_> {
                 lang,
             };
 
-            Ok(Some(sym))
+            Ok(Ok(sym))
         } else {
-            Ok(None)
+            Ok(Err(Reason::UnknownAddr))
         }
     }
 
@@ -186,7 +201,7 @@ impl SymResolver for GsymResolver<'_> {
         _opts: &FindAddrOpts,
     ) -> Result<Vec<SymInfo<'slf>>> {
         // It is inefficient to find the address of a symbol with
-        // GSYM.  We may support it in the future if needed.
+        // Gsym. We may support it in the future if needed.
         Ok(Vec::new())
     }
 
@@ -324,6 +339,19 @@ mod tests {
     use test_log::test;
 
 
+    /// Exercise the `Debug` representation of various types.
+    #[test]
+    fn debug_repr() {
+        let test_gsym = Path::new(&env!("CARGO_MANIFEST_DIR"))
+            .join("data")
+            .join("test-stable-addresses.gsym");
+
+        let resolver = GsymResolver::new(test_gsym).unwrap();
+        let dbg = format!("{resolver:?}");
+        assert!(dbg.starts_with("GSYM"), "{dbg}");
+        assert!(dbg.ends_with("test-stable-addresses.gsym"), "{dbg}");
+    }
+
     /// Check that we can create a `GsymResolver` using a "raw" slice of data.
     #[test]
     fn creation_from_raw_data() {
@@ -336,7 +364,8 @@ mod tests {
         assert_eq!(resolver.file_name, None);
     }
 
-    /// Make sure that we can find file line information for a function, if available.
+    /// Make sure that we can find file line information for a function, if
+    /// available.
     #[test]
     fn find_line_info() {
         let test_gsym = Path::new(&env!("CARGO_MANIFEST_DIR"))
@@ -348,14 +377,14 @@ mod tests {
         // line.
         let info = resolver.find_code_info(0x2000000, true).unwrap().unwrap();
         assert_eq!(info.direct.1.line, Some(50));
-        assert_eq!(info.direct.1.file, "test-stable-addresses.c");
+        assert_eq!(info.direct.1.file, OsStr::new("test-stable-addresses.c"));
         assert_eq!(info.inlined, Vec::new());
 
         // `factorial` resides at address 0x2000100, and it's located at the
         // given line.
         let info = resolver.find_code_info(0x2000100, true).unwrap().unwrap();
         assert_eq!(info.direct.1.line, Some(8));
-        assert_eq!(info.direct.1.file, "test-stable-addresses.c");
+        assert_eq!(info.direct.1.file, OsStr::new("test-stable-addresses.c"));
         assert_eq!(info.inlined, Vec::new());
 
         // Address is hopefully sufficiently far into `factorial_inline_test` to
@@ -367,19 +396,19 @@ mod tests {
 
         let info = resolver.find_code_info(addr, true).unwrap().unwrap();
         assert_eq!(info.direct.1.line, Some(32));
-        assert_eq!(info.direct.1.file, "test-stable-addresses.c");
+        assert_eq!(info.direct.1.file, OsStr::new("test-stable-addresses.c"));
         assert_eq!(info.inlined.len(), 2);
 
         let name = &info.inlined[0].0;
         assert_eq!(*name, "factorial_inline_wrapper");
         let frame = info.inlined[0].1.as_ref().unwrap();
-        assert_eq!(frame.file, "test-stable-addresses.c");
+        assert_eq!(frame.file, OsStr::new("test-stable-addresses.c"));
         assert_eq!(frame.line, Some(26));
 
         let name = &info.inlined[1].0;
         assert_eq!(*name, "factorial_2nd_layer_inline_wrapper");
         let frame = info.inlined[1].1.as_ref().unwrap();
-        assert_eq!(frame.file, "test-stable-addresses.c");
+        assert_eq!(frame.file, OsStr::new("test-stable-addresses.c"));
         assert_eq!(frame.line, Some(21));
 
         let info = resolver.find_code_info(addr, false).unwrap().unwrap();
@@ -387,7 +416,20 @@ mod tests {
         // different to that when using inlined function information, because in
         // Gsym this additional data is used to "refine" the result.
         assert_eq!(info.direct.1.line, Some(21));
-        assert_eq!(info.direct.1.file, "test-stable-addresses.c");
+        assert_eq!(info.direct.1.file, OsStr::new("test-stable-addresses.c"));
         assert_eq!(info.inlined, Vec::new());
+    }
+
+    /// Check that [`GsymResolver::find_addr`] behaves as expected.
+    #[test]
+    fn unsupported_find_addr() {
+        let test_gsym = Path::new(&env!("CARGO_MANIFEST_DIR"))
+            .join("data")
+            .join("test-stable-addresses.gsym");
+        let resolver = GsymResolver::new(test_gsym).unwrap();
+        let syms = resolver
+            .find_addr("factorial", &FindAddrOpts::default())
+            .unwrap();
+        assert_eq!(syms, Vec::new());
     }
 }

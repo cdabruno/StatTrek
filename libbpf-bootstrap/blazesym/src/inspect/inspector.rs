@@ -1,12 +1,4 @@
-use std::cell::RefCell;
-use std::path::Path;
-use std::rc::Rc;
-
-#[cfg(feature = "dwarf")]
-use crate::dwarf::DwarfResolver;
-use crate::elf::ElfBackend;
-use crate::elf::ElfParser;
-use crate::elf::ElfResolver;
+use crate::elf::ElfResolverData;
 use crate::file_cache::FileCache;
 use crate::Result;
 use crate::SymResolver;
@@ -33,58 +25,15 @@ use super::SymType;
 /// to consider creating a new `Inspector` instance regularly.
 #[derive(Debug)]
 pub struct Inspector {
-    elf_cache: RefCell<FileCache<Rc<ElfResolver>>>,
+    elf_cache: FileCache<ElfResolverData>,
 }
 
 impl Inspector {
     /// Create a new `Inspector`.
     pub fn new() -> Self {
         Self {
-            elf_cache: RefCell::new(FileCache::new()),
+            elf_cache: FileCache::new(),
         }
-    }
-
-    // TODO: Overlap with similar functionality in the `Symbolizer`. Need to
-    //       deduplicate at some point.
-    fn elf_resolver_from_parser(
-        &self,
-        path: &Path,
-        parser: Rc<ElfParser>,
-        debug_info: bool,
-    ) -> Result<Rc<ElfResolver>> {
-        #[cfg(feature = "dwarf")]
-        let backend = if debug_info {
-            let debug_line_info = true;
-            let dwarf = DwarfResolver::from_parser(parser, debug_line_info)?;
-            let backend = ElfBackend::Dwarf(Rc::new(dwarf));
-            backend
-        } else {
-            ElfBackend::Elf(parser)
-        };
-
-        #[cfg(not(feature = "dwarf"))]
-        let backend = ElfBackend::Elf(parser);
-
-        let resolver = Rc::new(ElfResolver::with_backend(path, backend)?);
-        Ok(resolver)
-    }
-
-    fn elf_resolver(&self, path: &Path, debug_info: bool) -> Result<Rc<ElfResolver>> {
-        let mut cache = self.elf_cache.borrow_mut();
-        let (file, entry) = cache.entry(path)?;
-        let resolver = if let Some(resolver) = entry {
-            if resolver.uses_dwarf() == debug_info {
-                resolver.clone()
-            } else {
-                self.elf_resolver_from_parser(path, resolver.parser().clone(), debug_info)?
-            }
-        } else {
-            let parser = Rc::new(ElfParser::open_file(file)?);
-            self.elf_resolver_from_parser(path, parser, debug_info)?
-        };
-
-        *entry = Some(resolver.clone());
-        Ok(resolver)
     }
 
     /// Look up information (address etc.) about a list of symbols,
@@ -94,8 +43,8 @@ impl Inspector {
     /// - no symbol name demangling is performed currently
     pub fn lookup<'slf>(
         &'slf self,
-        names: &[&str],
         src: &Source,
+        names: &[&str],
     ) -> Result<Vec<Vec<SymInfo<'slf>>>> {
         let opts = FindAddrOpts {
             offset_in_file: true,
@@ -105,10 +54,11 @@ impl Inspector {
         match src {
             Source::Elf(Elf {
                 path,
-                debug_info,
+                debug_syms,
                 _non_exhaustive: (),
             }) => {
-                let resolver = self.elf_resolver(path, *debug_info)?;
+                let code_info = true;
+                let resolver = self.elf_cache.elf_resolver(path, *debug_syms, code_info)?;
                 let syms = names
                     .iter()
                     .map(|name| {
@@ -134,12 +84,11 @@ impl Inspector {
     ///
     /// # Notes
     /// - no symbol name demangling is performed currently
-    /// - currently only function symbols (as opposed to variables) are
-    ///   reported
-    /// - undefined symbols (such as ones referencing a different shared
-    ///   object) are not reported
+    /// - currently only function symbols (as opposed to variables) are reported
+    /// - undefined symbols (such as ones referencing a different shared object)
+    ///   are not reported
     /// - for the [`Elf`](Source::Elf) source, at present DWARF symbols are
-    ///   ignored (irrespective of the [`debug_info`][Elf::debug_info]
+    ///   ignored (irrespective of the [`debug_syms`][Elf::debug_syms]
     ///   configuration)
     pub fn for_each<F, R>(&self, src: &Source, r: R, f: F) -> Result<R>
     where
@@ -148,14 +97,15 @@ impl Inspector {
         match src {
             Source::Elf(Elf {
                 path,
-                debug_info,
+                debug_syms,
                 _non_exhaustive: (),
             }) => {
                 let opts = FindAddrOpts {
                     offset_in_file: true,
                     sym_type: SymType::Unknown,
                 };
-                let resolver = self.elf_resolver(path, *debug_info)?;
+                let code_info = true;
+                let resolver = self.elf_cache.elf_resolver(path, *debug_syms, code_info)?;
                 let parser = resolver.parser();
                 parser.for_each_sym(&opts, r, f)
             }
@@ -175,6 +125,7 @@ mod tests {
     use super::*;
 
     use std::path::Path;
+    use std::rc::Rc;
 
     use crate::ErrorKind;
 
@@ -192,7 +143,7 @@ mod tests {
     fn non_present_file() {
         fn test(src: &Source) {
             let inspector = Inspector::new();
-            let err = inspector.lookup(&["factorial"], src).unwrap_err();
+            let err = inspector.lookup(src, &["factorial"]).unwrap_err();
             assert_eq!(err.kind(), ErrorKind::NotFound);
         }
 
@@ -203,7 +154,7 @@ mod tests {
         let () = test(&src);
 
         let mut elf = Elf::new(file);
-        elf.debug_info = !elf.debug_info;
+        elf.debug_syms = !elf.debug_syms;
         let src = Source::Elf(elf);
         let () = test(&src);
     }
@@ -215,27 +166,39 @@ mod tests {
             .join("data")
             .join("test-stable-addresses-no-dwarf.bin");
         let mut elf = Elf::new(&test_elf);
-        assert!(elf.debug_info);
+        assert!(elf.debug_syms);
 
         let inspector = Inspector::new();
-        let resolver = || {
-            let mut cache = inspector.elf_cache.borrow_mut();
-            cache.entry(&test_elf).unwrap().1.as_ref().unwrap().clone()
+        let data = || {
+            inspector
+                .elf_cache
+                .entry(&test_elf)
+                .unwrap()
+                .1
+                .get()
+                .unwrap()
+                .clone()
         };
 
-        let _results = inspector.lookup(&["factorial"], &Source::Elf(elf.clone()));
-        let resolver1 = resolver();
+        let _results = inspector.lookup(&Source::Elf(elf.clone()), &["factorial"]);
+        let data1 = data();
 
-        let _results = inspector.lookup(&["factorial"], &Source::Elf(elf.clone()));
-        let resolver2 = resolver();
-        assert!(Rc::ptr_eq(&resolver1, &resolver2));
+        let _results = inspector.lookup(&Source::Elf(elf.clone()), &["factorial"]);
+        let data2 = data();
+        assert!(Rc::ptr_eq(
+            data1.dwarf.get().unwrap(),
+            data2.dwarf.get().unwrap()
+        ));
 
-        // When changing whether we use debug information we should create a new
-        // resolver.
-        elf.debug_info = false;
+        // When changing whether we use debug symbols we should create a
+        // new resolver.
+        elf.debug_syms = false;
 
-        let _results = inspector.lookup(&["factorial"], &Source::Elf(elf.clone()));
-        let resolver3 = resolver();
-        assert!(!Rc::ptr_eq(&resolver1, &resolver3));
+        let _results = inspector.lookup(&Source::Elf(elf.clone()), &["factorial"]);
+        let data3 = data();
+        assert!(!Rc::ptr_eq(
+            data1.dwarf.get().unwrap(),
+            data3.elf.get().unwrap()
+        ));
     }
 }

@@ -1,83 +1,80 @@
-use std::collections::hash_map;
-use std::collections::HashMap;
 use std::fs::File;
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
 use std::path::PathBuf;
 
+use crate::insert_map::InsertMap;
+use crate::once::OnceCell;
 use crate::util::fstat;
 use crate::ErrorExt as _;
 use crate::Result;
 
 
-#[derive(Debug)]
-struct Entry<T> {
+#[derive(Debug, Eq, Hash, PartialEq)]
+// `libc` has deprecated `time_t` usage on `musl`. See
+// https://github.com/rust-lang/libc/issues/1848
+#[cfg_attr(target_env = "musl", allow(deprecated))]
+struct EntryMeta {
+    path: PathBuf,
     dev: libc::dev_t,
     inode: libc::ino_t,
     size: libc::off_t,
     mtime_sec: libc::time_t,
     mtime_nsec: i64,
+}
+
+impl EntryMeta {
+    fn new(path: PathBuf, stat: &libc::stat) -> Self {
+        // Casts are necessary because on Android some libc types do not
+        // use proper typedefs. https://github.com/rust-lang/libc/issues/3285
+        Self {
+            path,
+            dev: stat.st_dev as _,
+            inode: stat.st_ino as _,
+            size: stat.st_size as _,
+            mtime_sec: stat.st_mtime,
+            mtime_nsec: stat.st_mtime_nsec as _,
+        }
+    }
+}
+
+
+#[derive(Debug)]
+struct Entry<T> {
     file: File,
-    value: Option<T>,
+    value: OnceCell<T>,
 }
 
 impl<T> Entry<T> {
-    fn new(stat: &libc::stat, file: File) -> Self {
+    fn new(file: File) -> Self {
         Self {
-            dev: stat.st_dev,
-            inode: stat.st_ino,
-            size: stat.st_size,
-            mtime_sec: stat.st_mtime,
-            mtime_nsec: stat.st_mtime_nsec,
             file,
-            value: None,
+            value: OnceCell::new(),
         }
-    }
-
-    fn is_current(&self, stat: &libc::stat) -> bool {
-        stat.st_dev == self.dev
-            && stat.st_ino == self.inode
-            && stat.st_size == self.size
-            && stat.st_mtime == self.mtime_sec
-            && stat.st_mtime_nsec == self.mtime_nsec
     }
 }
 
 
 #[derive(Debug)]
 pub(crate) struct FileCache<T> {
-    cache: HashMap<PathBuf, Entry<T>>,
+    cache: InsertMap<EntryMeta, Entry<T>>,
 }
 
 impl<T> FileCache<T> {
     pub fn new() -> Self {
         Self {
-            cache: HashMap::new(),
+            cache: InsertMap::new(),
         }
     }
 
-    pub fn entry(&mut self, path: &Path) -> Result<(&File, &mut Option<T>)> {
+    pub fn entry(&self, path: &Path) -> Result<(&File, &OnceCell<T>)> {
         let file =
             File::open(path).with_context(|| format!("failed to open file {}", path.display()))?;
         let stat = fstat(file.as_raw_fd())?;
+        let meta = EntryMeta::new(path.to_path_buf(), &stat);
 
-        match self.cache.entry(path.to_path_buf()) {
-            hash_map::Entry::Occupied(mut occupied) => {
-                if occupied.get().is_current(&stat) {
-                    let entry = occupied.into_mut();
-                    return Ok((&entry.file, &mut entry.value))
-                }
-                let entry = Entry::new(&stat, file);
-                let _old = occupied.insert(entry);
-                let entry = occupied.into_mut();
-                Ok((&entry.file, &mut entry.value))
-            }
-            hash_map::Entry::Vacant(vacancy) => {
-                let entry = Entry::new(&stat, file);
-                let entry = vacancy.insert(entry);
-                Ok((&entry.file, &mut entry.value))
-            }
-        }
+        let entry = self.cache.get_or_insert(meta, || Entry::new(file));
+        Ok((&entry.file, &entry.value))
     }
 }
 
@@ -91,49 +88,50 @@ mod tests {
     use std::thread::sleep;
     use std::time::Duration;
 
+    use tempfile::tempfile;
     use tempfile::NamedTempFile;
 
 
     /// Exercise the `Debug` representation of various types.
     #[test]
     fn debug_repr() {
-        let mut cache = FileCache::<()>::new();
+        let cache = FileCache::<()>::new();
         assert_ne!(format!("{cache:?}"), "");
 
-        let tmpfile = NamedTempFile::new().unwrap();
-        let (_file, _entry) = cache.entry(tmpfile.path()).unwrap();
-        let entry = cache.cache.get(tmpfile.path()).unwrap();
+        let tmpfile = tempfile().unwrap();
+        let entry = Entry::<usize>::new(tmpfile);
         assert_ne!(format!("{entry:?}"), "");
     }
 
     /// Check that we can associate data with a file.
     #[test]
     fn lookup() {
-        let mut cache = FileCache::<usize>::new();
+        let cache = FileCache::<usize>::new();
         let tmpfile = NamedTempFile::new().unwrap();
-        {
-            let (_file, entry) = cache.entry(tmpfile.path()).unwrap();
-            assert_eq!(*entry, None);
 
-            *entry = Some(42);
+        {
+            let (_file, cell) = cache.entry(tmpfile.path()).unwrap();
+            assert_eq!(cell.get(), None);
+
+            let () = cell.set(42).unwrap();
         }
 
         {
-            let (_file, entry) = cache.entry(tmpfile.path()).unwrap();
-            assert_eq!(*entry, Some(42));
+            let (_file, cell) = cache.entry(tmpfile.path()).unwrap();
+            assert_eq!(cell.get(), Some(&42));
         }
     }
 
     /// Make sure that a changed file purges the cache entry.
     #[test]
     fn outdated() {
-        let mut cache = FileCache::<usize>::new();
+        let cache = FileCache::<usize>::new();
         let tmpfile = NamedTempFile::new().unwrap();
         let modified = {
-            let (file, entry) = cache.entry(tmpfile.path()).unwrap();
-            assert_eq!(*entry, None);
+            let (file, cell) = cache.entry(tmpfile.path()).unwrap();
+            assert_eq!(cell.get(), None);
 
-            *entry = Some(42);
+            let () = cell.set(42).unwrap();
             file.metadata().unwrap().modified().unwrap()
         };
 
@@ -146,7 +144,7 @@ mod tests {
 
         {
             let (mut file, entry) = cache.entry(tmpfile.path()).unwrap();
-            assert_eq!(*entry, None);
+            assert_eq!(entry.get(), None);
             assert_ne!(file.metadata().unwrap().modified().unwrap(), modified);
 
             let mut content = Vec::new();

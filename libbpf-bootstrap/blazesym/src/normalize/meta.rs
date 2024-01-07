@@ -22,7 +22,7 @@ type BuildId = Vec<u8>;
 /// let addr_in_elf_in_apk = capture_addr_in_elf_in_apk();
 /// let normalizer = normalize::Normalizer::new();
 /// let normalized = normalizer
-///     .normalize_user_addrs_sorted([addr_in_elf_in_apk].as_slice(), Pid::Slf)
+///     .normalize_user_addrs_sorted(Pid::Slf, [addr_in_elf_in_apk].as_slice())
 ///     .unwrap();
 /// let (output, meta_idx) = normalized.outputs[0];
 /// let meta = &normalized.meta[meta_idx];
@@ -44,7 +44,7 @@ pub struct Apk {
     pub path: PathBuf,
     /// The struct is non-exhaustive and open to extension.
     #[doc(hidden)]
-    pub(crate) _non_exhaustive: (),
+    pub _non_exhaustive: (),
 }
 
 
@@ -59,7 +59,7 @@ pub struct Elf {
     pub build_id: Option<BuildId>,
     /// The struct is non-exhaustive and open to extension.
     #[doc(hidden)]
-    pub(crate) _non_exhaustive: (),
+    pub _non_exhaustive: (),
 }
 
 
@@ -74,7 +74,7 @@ pub struct Elf {
 pub struct Unknown {
     /// The struct is non-exhaustive and open to extension.
     #[doc(hidden)]
-    pub(crate) _non_exhaustive: (),
+    pub _non_exhaustive: (),
 }
 
 impl From<Unknown> for UserMeta {

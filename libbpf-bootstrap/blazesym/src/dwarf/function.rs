@@ -33,7 +33,8 @@ use std::vec;
 
 use gimli::Error;
 
-use super::lazy::LazyCell;
+use crate::once::OnceCell;
+
 use super::range::RangeAttributes;
 use super::reader::R;
 
@@ -249,7 +250,7 @@ pub(crate) struct Function<'dwarf> {
     /// The function's range (begin and end address).
     pub(crate) range: Option<gimli::Range>,
     /// List of inlined function calls.
-    pub(super) inlined_functions: LazyCell<Result<InlinedFunctions<'dwarf>, Error>>,
+    pub(super) inlined_functions: OnceCell<InlinedFunctions<'dwarf>>,
 }
 
 impl Debug for Function<'_> {
@@ -362,7 +363,7 @@ impl<'dwarf> Functions<'dwarf> {
                             dw_die_offset,
                             name,
                             range: ranges.bounds(),
-                            inlined_functions: LazyCell::new(),
+                            inlined_functions: OnceCell::new(),
                         };
                         functions.push(function);
                     }
@@ -461,12 +462,8 @@ impl<'dwarf> Function<'dwarf> {
         unit: &gimli::Unit<R<'dwarf>>,
         sections: &gimli::Dwarf<R<'dwarf>>,
     ) -> Result<&InlinedFunctions<'dwarf>, Error> {
-        let inlined_fns = self
-            .inlined_functions
-            .borrow_with(|| InlinedFunctions::parse(self.dw_die_offset, unit, sections))
-            .as_ref()
-            .map_err(Error::clone)?;
-        Ok(inlined_fns)
+        self.inlined_functions
+            .get_or_try_init(|| InlinedFunctions::parse(self.dw_die_offset, unit, sections))
     }
 
 
@@ -620,7 +617,7 @@ mod tests {
             dw_die_offset: gimli::UnitOffset(24),
             name: None,
             range: None,
-            inlined_functions: LazyCell::new(),
+            inlined_functions: OnceCell::new(),
         };
         assert_ne!(format!("{func:?}"), "");
 

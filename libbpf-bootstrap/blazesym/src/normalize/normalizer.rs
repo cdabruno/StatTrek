@@ -23,7 +23,8 @@ pub struct Output<M> {
     ///
     /// A file offset is one as it would appear in a binary or debug symbol
     /// file, i.e., one excluding any relocations. The data reported here can be
-    /// used with the [`symbolize::Input::FileOffset`][crate::symbolize::Input::FileOffset]
+    /// used with the
+    /// [`symbolize::Input::FileOffset`][crate::symbolize::Input::FileOffset]
     /// variant.
     pub outputs: Vec<(u64, usize)>,
     /// Meta information about the normalized outputs.
@@ -113,7 +114,7 @@ impl Normalizer {
     /// Normalized addresses are reported in the exact same order in which the
     /// non-normalized ones were provided.
     #[cfg_attr(feature = "tracing", crate::log::instrument(skip(self)))]
-    pub fn normalize_user_addrs_sorted(&self, addrs: &[Addr], pid: Pid) -> Result<UserOutput> {
+    pub fn normalize_user_addrs_sorted(&self, pid: Pid, addrs: &[Addr]) -> Result<UserOutput> {
         normalize_user_addrs_sorted_impl(addrs.iter().copied(), pid, self.build_ids)
     }
 
@@ -127,7 +128,7 @@ impl Normalizer {
     /// [`Normalizer::normalize_user_addrs_sorted`] instead will result in
     /// slightly faster normalization.
     #[cfg_attr(feature = "tracing", crate::log::instrument(skip(self)))]
-    pub fn normalize_user_addrs(&self, addrs: &[Addr], pid: Pid) -> Result<UserOutput> {
+    pub fn normalize_user_addrs(&self, pid: Pid, addrs: &[Addr]) -> Result<UserOutput> {
         util::with_ordered_elems(
             addrs,
             |normalized: &mut UserOutput| normalized.outputs.as_mut_slice(),
@@ -157,7 +158,6 @@ mod tests {
     use crate::normalize::UserMeta;
     use crate::symbolize;
     use crate::symbolize::Symbolizer;
-    use crate::zip;
 
 
     /// Check that we detect unsorted input addresses.
@@ -173,7 +173,7 @@ mod tests {
 
         let normalizer = Normalizer::new();
         let err = normalizer
-            .normalize_user_addrs_sorted(addrs.as_slice(), Pid::Slf)
+            .normalize_user_addrs_sorted(Pid::Slf, addrs.as_slice())
             .unwrap_err();
         assert!(err.to_string().contains("are not sorted"), "{err}");
     }
@@ -187,7 +187,7 @@ mod tests {
 
         let normalizer = Normalizer::new();
         let normalized = normalizer
-            .normalize_user_addrs_sorted(addrs.as_slice(), Pid::Slf)
+            .normalize_user_addrs_sorted(Pid::Slf, addrs.as_slice())
             .unwrap();
         assert_eq!(normalized.outputs.len(), 2);
         assert_eq!(normalized.meta.len(), 1);
@@ -216,7 +216,7 @@ mod tests {
 
         let normalizer = Normalizer::new();
         let normalized = normalizer
-            .normalize_user_addrs(addrs.as_slice(), Pid::Slf)
+            .normalize_user_addrs(Pid::Slf, addrs.as_slice())
             .unwrap();
         assert_eq!(normalized.outputs.len(), 6);
 
@@ -265,7 +265,7 @@ mod tests {
 
         let normalizer = Normalizer::new();
         let normalized = normalizer
-            .normalize_user_addrs_sorted([the_answer_addr as Addr].as_slice(), Pid::Slf)
+            .normalize_user_addrs_sorted(Pid::Slf, [the_answer_addr as Addr].as_slice())
             .unwrap();
         assert_eq!(normalized.outputs.len(), 1);
         assert_eq!(normalized.meta.len(), 1);
@@ -286,8 +286,11 @@ mod tests {
 
     /// Check that we can normalize addresses in our own shared object inside a
     /// zip archive.
+    #[cfg(feature = "apk")]
     #[test]
     fn normalize_custom_so_in_zip() {
+        use crate::zip;
+
         fn test(so_name: &str) {
             let test_zip = Path::new(&env!("CARGO_MANIFEST_DIR"))
                 .join("data")
@@ -329,7 +332,7 @@ mod tests {
 
             let normalizer = Normalizer::new();
             let normalized = normalizer
-                .normalize_user_addrs_sorted([the_answer_addr as Addr].as_slice(), Pid::Slf)
+                .normalize_user_addrs_sorted(Pid::Slf, [the_answer_addr as Addr].as_slice())
                 .unwrap();
             assert_eq!(normalized.outputs.len(), 1);
             assert_eq!(normalized.meta.len(), 1);

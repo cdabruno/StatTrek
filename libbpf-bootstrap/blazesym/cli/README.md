@@ -1,8 +1,11 @@
 [![pipeline](https://github.com/libbpf/blazesym/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/libbpf/blazesym/actions/workflows/test.yml)
+[![crates.io](https://img.shields.io/crates/v/blazecli.svg)](https://crates.io/crates/blazecli)
 [![rustc](https://img.shields.io/badge/rustc-1.65+-blue.svg)](https://blog.rust-lang.org/2022/11/03/Rust-1.65.0.html)
 
 blazecli
 ========
+
+- [Changelog](CHANGELOG.md)
 
 **blazecli** is a command line interface for the
 [**blazesym**][blazesym] library. It aims to closely mirror the
@@ -44,7 +47,7 @@ completion script can be generated via the `shell-complete` utility
 program and then only needs to be sourced to make the current shell
 provide context-sensitive tab completion support. E.g.,
 ```bash
-$ cargo run --bin=shell-complete --features="clap_complete" -- bash > blazecli.bash
+$ cargo run -p blazecli --bin=shell-complete --features="clap_complete" -- bash > blazecli.bash
 $ source blazecli.bash
 ```
 
@@ -56,5 +59,5 @@ refer to the help text (`--help`) of the `shell-complete` program for
 the list of supported shells.
 
 [blazesym]: https://crates.io/crates/blazesym
-[blazesym-sym]: https://docs.rs/blazesym/0.2.0-alpha.8/blazesym/symbolize/struct.Symbolizer.html
-[blazesym-elf-src]: https://docs.rs/blazesym/0.2.0-alpha.8/blazesym/symbolize/enum.Source.html#variant.Elf
+[blazesym-sym]: https://docs.rs/blazesym/0.2.0-alpha.9/blazesym/symbolize/struct.Symbolizer.html
+[blazesym-elf-src]: https://docs.rs/blazesym/0.2.0-alpha.9/blazesym/symbolize/enum.Source.html#variant.Elf

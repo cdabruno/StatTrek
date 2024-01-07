@@ -1,6 +1,4 @@
 use std::borrow::Cow;
-use std::cell::RefCell;
-use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fmt::Formatter;
 use std::fmt::Result as FmtResult;
@@ -13,8 +11,10 @@ use std::path::PathBuf;
 use crate::inspect::FindAddrOpts;
 use crate::inspect::SymInfo;
 use crate::inspect::SymType;
+use crate::once::OnceCell;
 use crate::symbolize::AddrCodeInfo;
 use crate::symbolize::IntSym;
+use crate::symbolize::Reason;
 use crate::symbolize::SrcLang;
 use crate::util::find_match_or_lower_bound_by_key;
 use crate::Addr;
@@ -50,8 +50,12 @@ impl<'ksym> From<&'ksym Ksym> for IntSym<'ksym> {
 /// The users should provide the path of kallsyms, so you can provide
 /// a copy from other devices.
 pub struct KSymResolver {
+    // SAFETY: We must not hand out strings with a 'static lifetime to
+    //         callers. Rather, they should never outlive `self`.
+    //         Furthermore, this member has to be listed before `syms`
+    //         to make sure we never end up with dangling references.
+    sym_to_addr: OnceCell<Vec<(&'static str, Addr)>>,
     syms: Vec<Ksym>,
-    sym_to_addr: RefCell<HashMap<&'static str, Addr>>,
     file_name: PathBuf,
 }
 
@@ -88,27 +92,25 @@ impl KSymResolver {
 
         let slf = Self {
             syms,
-            sym_to_addr: RefCell::default(),
+            sym_to_addr: OnceCell::new(),
             file_name: filename,
         };
         Ok(slf)
     }
 
-    fn ensure_sym_to_addr(&self) {
-        if self.sym_to_addr.borrow().len() > 0 {
-            return
+    fn find_ksym(&self, addr: Addr) -> Result<&Ksym, Reason> {
+        let result = find_match_or_lower_bound_by_key(&self.syms, addr, |ksym: &Ksym| ksym.addr)
+            .and_then(|idx| self.syms.get(idx));
+        match result {
+            Some(sym) => Ok(sym),
+            None => {
+                if self.syms.is_empty() {
+                    Err(Reason::MissingSyms)
+                } else {
+                    Err(Reason::UnknownAddr)
+                }
+            }
         }
-        let mut sym_to_addr = self.sym_to_addr.borrow_mut();
-        for Ksym { name, addr } in self.syms.iter() {
-            // Performance & lifetime hacking
-            let name_static = unsafe { &*(name as *const String) };
-            sym_to_addr.insert(name_static, *addr);
-        }
-    }
-
-    fn find_ksym(&self, addr: Addr) -> Option<&Ksym> {
-        find_match_or_lower_bound_by_key(&self.syms, addr, |ksym: &Ksym| ksym.addr)
-            .and_then(|idx| self.syms.get(idx))
     }
 
     /// Retrieve the path to the kallsyms file used by this resolver.
@@ -118,7 +120,7 @@ impl KSymResolver {
 }
 
 impl SymResolver for KSymResolver {
-    fn find_sym(&self, addr: Addr) -> Result<Option<IntSym<'_>>> {
+    fn find_sym(&self, addr: Addr) -> Result<Result<IntSym<'_>, Reason>> {
         let sym = self.find_ksym(addr).map(IntSym::from);
         Ok(sym)
     }
@@ -127,21 +129,41 @@ impl SymResolver for KSymResolver {
         if let SymType::Variable = opts.sym_type {
             return Ok(Vec::new())
         }
-        let () = self.ensure_sym_to_addr();
 
-        let sym_to_addr = self.sym_to_addr.borrow();
-        if let Some((name, addr)) = sym_to_addr.get_key_value(name) {
-            Ok(vec![SymInfo {
-                name: Cow::Borrowed(name),
-                addr: *addr,
-                size: 0,
-                sym_type: SymType::Function,
-                file_offset: None,
-                obj_file_name: None,
-            }])
+        let sym_to_addr = self.sym_to_addr.get_or_init(|| {
+            let mut syms = self
+                .syms
+                .iter()
+                .map(|Ksym { name, addr }| {
+                    // SAFETY: We ensure that all `Ksym` objects outlive the
+                    //         `syms` member, so conjuring up a 'static
+                    //         lifetime is fine.
+                    let name = unsafe { &*(name.as_ref() as *const str) };
+                    (name, *addr)
+                })
+                .collect::<Vec<_>>();
+            let () =
+                syms.sort_by(|sym1, sym2| sym1.0.cmp(sym2.0).then_with(|| sym1.1.cmp(&sym2.1)));
+            syms
+        });
+
+        let result = find_match_or_lower_bound_by_key(sym_to_addr, name, |(name, _addr)| name);
+        let syms = if let Some(idx) = result {
+            sym_to_addr[idx..]
+                .iter()
+                .map(|(name, addr)| SymInfo {
+                    name: Cow::Borrowed(*name),
+                    addr: *addr,
+                    size: 0,
+                    sym_type: SymType::Function,
+                    file_offset: None,
+                    obj_file_name: None,
+                })
+                .collect()
         } else {
-            Ok(Vec::new())
-        }
+            Vec::new()
+        };
+        Ok(syms)
     }
 
     fn find_code_info(&self, _addr: Addr, _inlined_fns: bool) -> Result<Option<AddrCodeInfo>> {
@@ -170,7 +192,7 @@ mod tests {
     fn debug_repr() {
         let resolver = KSymResolver {
             syms: Vec::new(),
-            sym_to_addr: RefCell::default(),
+            sym_to_addr: OnceCell::new(),
             file_name: PathBuf::new(),
         };
         assert_ne!(format!("{resolver:?}"), "");
@@ -197,40 +219,38 @@ mod tests {
             "kallsyms seems to be unavailable or with all 0 addresses. (Check {KALLSYMS})"
         );
 
+        let ensure_addr_for_name = |name, addr| {
+            let opts = FindAddrOpts {
+                offset_in_file: false,
+                sym_type: SymType::Function,
+            };
+            let found = resolver.find_addr(name, &opts).unwrap();
+            assert!(
+                found.iter().any(|x| x.addr == addr),
+                "{addr:#x} {found:#x?}"
+            );
+        };
+
+
         // Find the address of the symbol placed at the middle
         let sym = &resolver.syms[resolver.syms.len() / 2];
         let addr = sym.addr;
-        let name = sym.name.clone();
         let found = resolver.find_sym(addr).unwrap().unwrap();
-        assert_eq!(found.name, name);
-
-        let found = resolver.find_sym(addr + 1).unwrap().unwrap();
-        assert_eq!(found.name, name);
+        ensure_addr_for_name(found.name, addr);
 
         // 0 is an invalid address.  We remove all symbols with 0 as
-        // thier address from the list.
-        assert!(resolver.find_sym(0).unwrap().is_none());
+        // their address from the list.
+        assert!(resolver.find_sym(0).unwrap().is_err());
 
         // Find the address of the last symbol
         let sym = &resolver.syms.last().unwrap();
         let addr = sym.addr;
-        let name = sym.name.clone();
         let found = resolver.find_sym(addr).unwrap().unwrap();
-        assert_eq!(found.name, name);
+        ensure_addr_for_name(found.name, addr);
 
         let found = resolver.find_sym(addr + 1).unwrap().unwrap();
-        assert_eq!(found.name, name);
-
-        // Find the symbol placed at the one third
-        let sym = &resolver.syms[resolver.syms.len() / 3];
-        let addr = sym.addr;
-        let name = sym.name.clone();
-        let opts = FindAddrOpts {
-            offset_in_file: false,
-            sym_type: SymType::Function,
-        };
-        let found = resolver.find_addr(&name, &opts).unwrap();
-        assert!(found.iter().any(|x| x.addr == addr));
+        // Should still find the previous symbol, which is the last one.
+        ensure_addr_for_name(found.name, addr);
     }
 
     #[test]
@@ -254,12 +274,12 @@ mod tests {
                     name: "3".to_string(),
                 },
             ],
-            sym_to_addr: RefCell::default(),
+            sym_to_addr: OnceCell::new(),
             file_name: PathBuf::new(),
         };
 
         // The address is less than the smallest address of all symbols.
-        assert!(resolver.find_ksym(1).is_none());
+        assert!(resolver.find_ksym(1).is_err());
 
         // The address match symbols exactly (the first address.)
         let sym = resolver.find_ksym(0x123).unwrap();

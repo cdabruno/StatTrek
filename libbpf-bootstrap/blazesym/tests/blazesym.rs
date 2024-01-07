@@ -5,22 +5,35 @@
 )]
 
 use std::collections::HashSet;
+use std::env;
 use std::ffi::CString;
 use std::ffi::OsStr;
 use std::fs::read as read_file;
 use std::io::Error;
+use std::io::Read as _;
+use std::io::Write as _;
 use std::os::unix::ffi::OsStringExt as _;
 use std::path::Path;
+use std::process::Command;
+use std::process::Stdio;
+use std::str;
 
 use blazesym::helper::read_elf_build_id;
 use blazesym::inspect;
 use blazesym::inspect::Inspector;
 use blazesym::normalize::Normalizer;
 use blazesym::symbolize;
+use blazesym::symbolize::Reason;
+use blazesym::symbolize::Symbolized;
 use blazesym::symbolize::Symbolizer;
 use blazesym::Addr;
 use blazesym::ErrorKind;
 use blazesym::Pid;
+
+use libc::kill;
+use libc::SIGKILL;
+
+use scopeguard::defer;
 
 use test_log::test;
 
@@ -124,6 +137,22 @@ fn symbolize_elf_dwarf_gsym() {
     test(src, true);
 }
 
+/// Check that we "fail" symbolization as expected on a stripped ELF
+/// binary.
+#[test]
+fn symbolize_elf_stripped() {
+    let path = Path::new(&env!("CARGO_MANIFEST_DIR"))
+        .join("data")
+        .join("test-stable-addresses-stripped.bin");
+    let src = symbolize::Source::Elf(symbolize::Elf::new(path));
+    let symbolizer = Symbolizer::new();
+    let result = symbolizer
+        .symbolize_single(&src, symbolize::Input::VirtOffset(0x2000100))
+        .unwrap();
+
+    assert_eq!(result, Symbolized::Unknown(Reason::MissingSyms));
+}
+
 /// Make sure that we report (enabled) or don't report (disabled) inlined
 /// functions with DWARF and Gsym sources.
 #[test]
@@ -154,13 +183,13 @@ fn symbolize_dwarf_gsym_inlined() {
             let name = &result.inlined[0].name;
             assert_eq!(*name, "factorial_inline_wrapper");
             let frame = result.inlined[0].code_info.as_ref().unwrap();
-            assert_eq!(frame.file, "test-stable-addresses.c");
+            assert_eq!(frame.file, OsStr::new("test-stable-addresses.c"));
             assert_eq!(frame.line, Some(26));
 
             let name = &result.inlined[1].name;
             assert_eq!(*name, "factorial_2nd_layer_inline_wrapper");
             let frame = result.inlined[1].code_info.as_ref().unwrap();
-            assert_eq!(frame.file, "test-stable-addresses.c");
+            assert_eq!(frame.file, OsStr::new("test-stable-addresses.c"));
             assert_eq!(frame.line, Some(21));
         } else {
             assert!(result.inlined.is_empty(), "{:#?}", result.inlined);
@@ -276,7 +305,7 @@ fn symbolize_dwarf_demangle() {
 
     let inspector = Inspector::new();
     let results = inspector
-        .lookup(&["_RNvCs69hjMPjVIJK_4test13test_function"], &src)
+        .lookup(&src, &["_RNvCs69hjMPjVIJK_4test13test_function"])
         .unwrap()
         .into_iter()
         .flatten()
@@ -330,6 +359,62 @@ fn symbolize_process() {
     );
 }
 
+/// Check that we can symbolize an address in a process using a binary
+/// located in a local mount namespace.
+#[test]
+fn symbolize_process_in_mount_namespace() {
+    let test_so = Path::new(&env!("CARGO_MANIFEST_DIR"))
+        .join("data")
+        .join("libtest-so.so");
+    let mnt_ns = Path::new(&env!("CARGO_MANIFEST_DIR"))
+        .join("data")
+        .join("test-mnt-ns.bin");
+
+    let mut child = Command::new(mnt_ns)
+        .arg(test_so)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .unwrap();
+    let pid = child.id();
+    defer!({
+        // Best effort only. The child may end up terminating gracefully
+        // if everything goes as planned.
+        // TODO: Ideally this kill would be pid FD based to eliminate
+        //       any possibility of killing the wrong entity.
+        let _rc = unsafe { kill(pid as _, SIGKILL) };
+    });
+
+    let mut buf = [0u8; 64];
+    let count = child
+        .stdout
+        .as_mut()
+        .unwrap()
+        .read(&mut buf)
+        .expect("failed to read child output");
+    let addr_str = str::from_utf8(&buf[0..count]).unwrap().trim_end();
+    let addr = Addr::from_str_radix(addr_str.trim_start_matches("0x"), 16).unwrap();
+
+    // Make sure to destroy the symbolizer before terminating the child.
+    // Otherwise something holds on to a reference and cleanup may fail.
+    // TODO: This needs to be better understood.
+    {
+        let src = symbolize::Source::Process(symbolize::Process::new(Pid::from(child.id())));
+        let symbolizer = Symbolizer::new();
+        let result = symbolizer
+            .symbolize_single(&src, symbolize::Input::AbsAddr(addr))
+            .unwrap()
+            .into_sym()
+            .unwrap();
+        assert_eq!(result.name, "await_input");
+    }
+
+    // "Signal" the child to terminate gracefully.
+    let () = child.stdin.as_ref().unwrap().write_all(&[0x04]).unwrap();
+    let _status = child.wait().unwrap();
+}
+
 /// Check that we can normalize addresses in an ELF shared object.
 #[test]
 fn normalize_elf_addr() {
@@ -344,7 +429,7 @@ fn normalize_elf_addr() {
 
         let normalizer = Normalizer::new();
         let normalized = normalizer
-            .normalize_user_addrs_sorted([the_answer_addr as Addr].as_slice(), Pid::Slf)
+            .normalize_user_addrs_sorted(Pid::Slf, [the_answer_addr as Addr].as_slice())
             .unwrap();
         assert_eq!(normalized.outputs.len(), 1);
         assert_eq!(normalized.meta.len(), 1);
@@ -399,7 +484,7 @@ fn normalize_build_id_rading() {
             .enable_build_ids(read_build_ids)
             .build();
         let normalized = normalizer
-            .normalize_user_addrs_sorted([the_answer_addr as Addr].as_slice(), Pid::Slf)
+            .normalize_user_addrs_sorted(Pid::Slf, [the_answer_addr as Addr].as_slice())
             .unwrap();
         assert_eq!(normalized.outputs.len(), 1);
         assert_eq!(normalized.meta.len(), 1);
@@ -430,7 +515,7 @@ fn inspect() {
     fn test(src: inspect::Source) {
         let inspector = Inspector::new();
         let results = inspector
-            .lookup(&["factorial"], &src)
+            .lookup(&src, &["factorial"])
             .unwrap()
             .into_iter()
             .flatten()
@@ -456,10 +541,47 @@ fn inspect() {
         .join("data")
         .join("test-stable-addresses-no-dwarf.bin");
     let mut elf = inspect::Elf::new(test_elf);
-    assert!(elf.debug_info);
-    elf.debug_info = false;
+    assert!(elf.debug_syms);
+    elf.debug_syms = false;
     let src = inspect::Source::Elf(elf);
     let () = test(src);
+}
+
+
+/// Make sure that we can look up a dynamic symbol in an ELF file.
+#[test]
+fn inspect_dynamic_symbol() {
+    #[track_caller]
+    fn test(bin: &str) {
+        let bin = Path::new(&env!("CARGO_MANIFEST_DIR"))
+            .join("data")
+            .join(bin);
+
+        let src = inspect::Source::Elf(inspect::Elf::new(&bin));
+        let inspector = Inspector::new();
+        let results = inspector
+            .lookup(&src, &["the_answer"])
+            .unwrap()
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
+        assert_eq!(results.len(), 1);
+
+        let src = symbolize::Source::Elf(symbolize::Elf::new(&bin));
+        let symbolizer = Symbolizer::new();
+        let result = symbolizer
+            .symbolize_single(&src, symbolize::Input::VirtOffset(results[0].addr))
+            .unwrap()
+            .into_sym()
+            .unwrap();
+
+        assert_eq!(result.name, "the_answer");
+        assert_eq!(result.addr, results[0].addr);
+    }
+
+    test("libtest-so.so");
+    test("libtest-so-stripped.so");
+    test("libtest-so-partly-stripped.so");
 }
 
 
@@ -483,7 +605,7 @@ fn inspect_file_offset_elf() {
 
     let inspector = Inspector::new();
     let results = inspector
-        .lookup(&["dummy"], &src)
+        .lookup(&src, &["dummy"])
         .unwrap()
         .into_iter()
         .flatten()
@@ -518,4 +640,26 @@ fn inspect_all_symbols() {
     assert!(syms.contains("factorial"));
     assert!(syms.contains("factorial_wrapper"));
     assert!(syms.contains("factorial_inline_test"));
+}
+
+
+/// Check that we can iterate over all symbols in an ELF file, without
+/// encountering duplicates caused by dynamic/static symbol overlap.
+#[test]
+fn inspect_all_symbols_without_duplicates() {
+    let test_elf = Path::new(&env!("CARGO_MANIFEST_DIR"))
+        .join("data")
+        .join("libtest-so.so");
+    let elf = inspect::Elf::new(test_elf);
+    let src = inspect::Source::Elf(elf);
+
+    let inspector = Inspector::new();
+    let syms = inspector
+        .for_each(&src, Vec::<String>::new(), |mut syms, sym| {
+            let () = syms.push(sym.name.to_string());
+            syms
+        })
+        .unwrap();
+
+    assert_eq!(syms.iter().filter(|name| *name == "the_answer").count(), 1);
 }

@@ -164,6 +164,7 @@ fn gsym(src: &Path, dst: impl AsRef<OsStr>) {
     let dst = src.with_file_name(dst);
     println!("cargo:rerun-if-changed={}", src.display());
     println!("cargo:rerun-if-changed={}", dst.display());
+    println!("cargo:rerun-if-env-changed=LLVM_GSYMUTIL");
 
     let gsymutil = env::var_os("LLVM_GSYMUTIL").unwrap_or_else(|| OsString::from("llvm-gsymutil"));
 
@@ -324,6 +325,13 @@ fn prepare_test_files(crate_root: &Path) {
         "libtest-so-no-separate-code.so",
         &["-shared", "-fPIC", "-Wl,--build-id=md5,-z,noseparate-code"],
     );
+    let src = crate_root.join("data").join("libtest-so.so");
+    strip(&src, "libtest-so-stripped.so", &[]);
+    strip(
+        &src,
+        "libtest-so-partly-stripped.so",
+        &["--keep-symbol=the_ignored_answer"],
+    );
 
     let src = crate_root.join("data").join("test-exe.c");
     cc(&src, "test-no-debug.bin", &["-g0", "-Wl,--build-id=none"]);
@@ -331,6 +339,9 @@ fn prepare_test_files(crate_root: &Path) {
     cc(&src, "test-dwarf-v3.bin", &["-gstrict-dwarf", "-gdwarf-3"]);
     cc(&src, "test-dwarf-v4.bin", &["-gstrict-dwarf", "-gdwarf-4"]);
     cc(&src, "test-dwarf-v5.bin", &["-gstrict-dwarf", "-gdwarf-5"]);
+
+    let src = crate_root.join("data").join("test-mnt-ns.c");
+    cc(&src, "test-mnt-ns.bin", &[]);
 
     let src = crate_root.join("data").join("test-stable-addresses.c");
     let src_cu2 = crate_root.join("data").join("test-stable-addresses-cu2.c");
@@ -370,6 +381,7 @@ fn prepare_test_files(crate_root: &Path) {
     let src = crate_root.join("data").join("test-stable-addresses.bin");
     gsym(&src, "test-stable-addresses.gsym");
     dwarf(&src, "test-stable-addresses-dwarf-only.bin");
+    strip(&src, "test-stable-addresses-stripped.bin", &[]);
 
     let src = crate_root.join("data").join("kallsyms.xz");
     let mut dst = src.clone();
@@ -469,7 +481,7 @@ fn prepare_bench_files(crate_root: &Path) {
 }
 
 fn main() {
-    let crate_dir = env!("CARGO_MANIFEST_DIR");
+    let crate_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
 
     if cfg!(feature = "generate-unit-test-files")
         && !cfg!(feature = "dont-generate-unit-test-files")
@@ -480,68 +492,5 @@ fn main() {
     if cfg!(feature = "generate-large-test-files") {
         download_bench_files(crate_dir.as_ref());
         prepare_bench_files(crate_dir.as_ref());
-    }
-
-    #[cfg(feature = "generate-c-header")]
-    {
-        use std::fs::write;
-
-        cbindgen::Builder::new()
-            .with_crate(crate_dir)
-            .with_config(cbindgen::Config::from_root_or_default(crate_dir))
-            .generate()
-            .expect("Unable to generate bindings")
-            .write_to_file(Path::new(crate_dir).join("include").join("blazesym.h"));
-
-        // Generate a C program that just included blazesym.h as a basic
-        // smoke test that cbindgen didn't screw up completely.
-        let out_dir = env::var_os("OUT_DIR").unwrap();
-        let out_dir = Path::new(&out_dir);
-        let blaze_src_c = out_dir.join("blazesym.c");
-        let () = write(
-            &blaze_src_c,
-            r#"
-#include <blazesym.h>
-
-int main() {
-  return 0;
-}
-"#,
-        )
-        .unwrap();
-
-        let blaze_src_cxx = out_dir.join("blazesym.cpp");
-        let _bytes = copy(&blaze_src_c, &blaze_src_cxx).expect("failed to copy file");
-
-        cc(
-            &blaze_src_c,
-            "blazesym.bin",
-            &[
-                "-Wall",
-                "-Wextra",
-                "-Werror",
-                "-I",
-                Path::new(crate_dir).join("include").to_str().unwrap(),
-            ],
-        );
-
-        // Best-effort check that C++ can compile the thing as well. Hopefully
-        // all flags are supported...
-        for cxx in ["clang++", "g++"] {
-            if which::which(cxx).is_ok() {
-                compile(
-                    cxx,
-                    &blaze_src_cxx,
-                    &format!("blazesym_cxx_{cxx}.bin"),
-                    &[
-                        "-Wall",
-                        "-Wextra",
-                        "-Werror",
-                        "-I",
-                        Path::new(crate_dir).join("include").to_str().unwrap(),
-                    ],
-                );
-            }
-        }
     }
 }

@@ -89,7 +89,7 @@
 //!                 print_frame(&frame.name, None, &frame.code_info);
 //!             }
 //!         }
-//!         Symbolized::Unknown => {
+//!         Symbolized::Unknown(..) => {
 //!             println!("{input_addr:#0width$x}: <no-symbol>", width = ADDR_WIDTH)
 //!         }
 //!     }
@@ -101,14 +101,19 @@ mod symbolizer;
 
 use std::borrow::Cow;
 use std::ffi::OsStr;
-use std::ffi::OsString;
+use std::fmt::Display;
+use std::fmt::Formatter;
+use std::fmt::Result as FmtResult;
 use std::path::Path;
-use std::path::PathBuf;
 
+#[cfg(feature = "apk")]
 pub use source::Apk;
 pub use source::Elf;
+#[cfg(feature = "gsym")]
 pub use source::Gsym;
+#[cfg(feature = "gsym")]
 pub use source::GsymData;
+#[cfg(feature = "gsym")]
 pub use source::GsymFile;
 pub use source::Kernel;
 pub use source::Process;
@@ -139,6 +144,23 @@ pub enum Input<T> {
     FileOffset(T),
 }
 
+impl<T> Input<T> {
+    /// Extract the inner payload.
+    ///
+    /// ```rust
+    /// # use blazesym::symbolize;
+    /// let addrs = [1, 2, 3, 4];
+    /// let input = symbolize::Input::FileOffset(addrs.as_slice());
+    /// assert_eq!(input.into_inner(), &[1, 2, 3, 4]);
+    /// ```
+    #[inline]
+    pub fn into_inner(self) -> T {
+        match self {
+            Self::AbsAddr(x) | Self::VirtOffset(x) | Self::FileOffset(x) => x,
+        }
+    }
+}
+
 #[cfg(test)]
 impl<T> Input<&[T]>
 where
@@ -156,26 +178,6 @@ where
 
 
 #[derive(Debug, PartialEq)]
-pub(crate) struct FrameCodeInfo<'src> {
-    pub dir: &'src Path,
-    pub file: &'src OsStr,
-    pub line: Option<u32>,
-    pub column: Option<u16>,
-}
-
-impl From<&FrameCodeInfo<'_>> for CodeInfo {
-    fn from(other: &FrameCodeInfo<'_>) -> Self {
-        Self {
-            dir: Some(other.dir.to_path_buf()),
-            file: other.file.to_os_string(),
-            line: other.line,
-            column: other.column,
-            _non_exhaustive: (),
-        }
-    }
-}
-
-#[derive(Debug, PartialEq)]
 pub(crate) struct AddrCodeInfo<'src> {
     /// Source information about the top-level frame belonging to an
     /// address.
@@ -183,19 +185,19 @@ pub(crate) struct AddrCodeInfo<'src> {
     /// It also contains an optional name, which is necessary for
     /// formats where inline information can "correct" (overwrite) the
     /// name of the symbol.
-    pub direct: (Option<&'src str>, FrameCodeInfo<'src>),
+    pub direct: (Option<&'src str>, CodeInfo<'src>),
     /// Source information about inlined functions, along with their names.
-    pub inlined: Vec<(&'src str, Option<FrameCodeInfo<'src>>)>,
+    pub inlined: Vec<(&'src str, Option<CodeInfo<'src>>)>,
 }
 
 
 /// Source code location information for a symbol or inlined function.
 #[derive(Clone, Debug, PartialEq)]
-pub struct CodeInfo {
+pub struct CodeInfo<'src> {
     /// The directory in which the source file resides.
-    pub dir: Option<PathBuf>,
+    pub dir: Option<Cow<'src, Path>>,
     /// The file that defines the symbol.
-    pub file: OsString,
+    pub file: Cow<'src, OsStr>,
     /// The line number of the symbolized instruction in the source
     /// code.
     ///
@@ -207,10 +209,11 @@ pub struct CodeInfo {
     /// code.
     pub column: Option<u16>,
     /// The struct is non-exhaustive and open to extension.
-    pub(crate) _non_exhaustive: (),
+    #[doc(hidden)]
+    pub _non_exhaustive: (),
 }
 
-impl CodeInfo {
+impl CodeInfo<'_> {
     /// Helper method to retrieve the path to the represented source file,
     /// on a best-effort basis. It depends on the symbolization source data
     /// whether this path is absolute or relative and, if its the latter, what
@@ -223,18 +226,31 @@ impl CodeInfo {
             |dir| Cow::Owned(dir.join(&self.file)),
         )
     }
+
+    /// Convert this object into one with all references converted into
+    /// guaranteed owned (i.e., heap allocated) members.
+    pub fn to_owned(&self) -> CodeInfo<'static> {
+        CodeInfo {
+            dir: self.dir.as_ref().map(|dir| Cow::Owned(dir.to_path_buf())),
+            file: Cow::Owned(self.file.to_os_string()),
+            line: self.line,
+            column: self.column,
+            _non_exhaustive: (),
+        }
+    }
 }
 
 
 /// A type representing an inlined function.
 #[derive(Clone, Debug, PartialEq)]
-pub struct InlinedFn {
+pub struct InlinedFn<'src> {
     /// The symbol name of the inlined function.
-    pub name: String,
+    pub name: Cow<'src, str>,
     /// Source code location information for the call to the function.
-    pub code_info: Option<CodeInfo>,
+    pub code_info: Option<CodeInfo<'src>>,
     /// The struct is non-exhaustive and open to extension.
-    pub(crate) _non_exhaustive: (),
+    #[doc(hidden)]
+    pub _non_exhaustive: (),
 }
 
 
@@ -266,9 +282,9 @@ pub(crate) struct IntSym<'src> {
 
 /// The result of address symbolization by [`Symbolizer`].
 #[derive(Clone, Debug, PartialEq)]
-pub struct Sym {
+pub struct Sym<'src> {
     /// The symbol name that an address belongs to.
-    pub name: String,
+    pub name: Cow<'src, str>,
     /// The address at which the symbol is located (i.e., its "start").
     ///
     /// This is the "normalized" address of the symbol, as present in
@@ -288,7 +304,7 @@ pub struct Sym {
     /// The symbol's size, if available.
     pub size: Option<usize>,
     /// Source code location information for the symbol.
-    pub code_info: Option<CodeInfo>,
+    pub code_info: Option<CodeInfo<'src>>,
     /// Inlined function information, if requested and available.
     ///
     /// Availability depends on both the underlying symbolization source (e.g.,
@@ -300,9 +316,46 @@ pub struct Sym {
     /// falls into a function `f` at an inlined call to `g`, which in turn
     /// contains an inlined call to `h`, the symbols will be reported in the
     /// order `f`, `g`, `h`.
-    pub inlined: Box<[InlinedFn]>,
+    pub inlined: Box<[InlinedFn<'src>]>,
     /// The struct is non-exhaustive and open to extension.
-    pub(crate) _non_exhaustive: (),
+    #[doc(hidden)]
+    pub _non_exhaustive: (),
+}
+
+
+/// The reason why symbolization failed.
+///
+/// The reason is generally only meant as a hint. Reasons reported may change
+/// over time and, hence, should not be relied upon for the correctness of the
+/// application.
+#[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
+pub enum Reason {
+    /// The absolute address was not found in the corresponding process' virtual
+    /// memory map.
+    Unmapped,
+    /// The file offset does not map to a valid piece of code/data.
+    InvalidFileOffset,
+    /// The symbolization source has no or no relevant symbols.
+    ///
+    /// This reason could for instance be used if a shared object only
+    /// has dynamic symbols, but appears to be stripped aside from that.
+    MissingSyms,
+    /// The address could not be found in the symbolization source.
+    UnknownAddr,
+}
+
+impl Display for Reason {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        let s = match self {
+            Self::Unmapped => "absolute address not found in virtual memory map of process",
+            Self::InvalidFileOffset => "file offset does not map to a valid piece of code/data",
+            Self::MissingSyms => "symbolization source has no or no relevant symbols",
+            Self::UnknownAddr => "address not found in symbolization source",
+        };
+
+        f.write_str(s)
+    }
 }
 
 
@@ -310,31 +363,34 @@ pub struct Sym {
 // We keep this enum as exhaustive because additions to it, should they occur,
 // are expected to be backwards-compatibility breaking.
 #[derive(Clone, Debug, PartialEq)]
-pub enum Symbolized {
+pub enum Symbolized<'src> {
     /// The input address was symbolized as the provided symbol.
-    Sym(Sym),
+    Sym(Sym<'src>),
     /// The input address was not found and could not be symbolized.
-    Unknown,
+    ///
+    /// The provided reason is a best guess, hinting at what ultimately
+    /// prevented the symbolization from being successful.
+    Unknown(Reason),
 }
 
-impl Symbolized {
+impl<'src> Symbolized<'src> {
     /// Convert the object into a [`Sym`] reference, if the corresponding
     /// variant is active.
     #[inline]
-    pub fn as_sym(&self) -> Option<&Sym> {
+    pub fn as_sym(&self) -> Option<&Sym<'src>> {
         match self {
             Self::Sym(sym) => Some(sym),
-            Self::Unknown => None,
+            Self::Unknown(..) => None,
         }
     }
 
     /// Convert the object into a [`Sym`] object, if the corresponding variant
     /// is active.
     #[inline]
-    pub fn into_sym(self) -> Option<Sym> {
+    pub fn into_sym(self) -> Option<Sym<'src>> {
         match self {
             Self::Sym(sym) => Some(sym),
-            Self::Unknown => None,
+            Self::Unknown(..) => None,
         }
     }
 }
@@ -350,18 +406,57 @@ mod tests {
         let lang = SrcLang::default();
         assert_ne!(format!("{lang:?}"), "");
 
+        let input = Input::FileOffset(0x1337);
+        assert_ne!(format!("{input:?}"), "");
+
+        let code_info = CodeInfo {
+            dir: Some(Cow::Borrowed(Path::new("/tmp/some-dir"))),
+            file: Cow::Borrowed(OsStr::new("test.c")),
+            line: Some(1337),
+            column: None,
+            _non_exhaustive: (),
+        };
+
         let sym = Sym {
-            name: "test".to_string(),
+            name: Cow::Borrowed("test"),
             addr: 1337,
             offset: 42,
             size: None,
             code_info: None,
-            inlined: Box::new([]),
+            inlined: Box::new([InlinedFn {
+                name: Cow::Borrowed("inlined_test"),
+                code_info: Some(code_info.clone()),
+                _non_exhaustive: (),
+            }]),
             _non_exhaustive: (),
         };
         assert_ne!(format!("{sym:?}"), "");
 
         let symbolized = Symbolized::Sym(sym);
         assert_ne!(format!("{symbolized:?}"), "");
+
+        let addr_code_info = AddrCodeInfo {
+            direct: (None, code_info),
+            inlined: Vec::new(),
+        };
+        assert_ne!(format!("{addr_code_info:?}"), "");
+    }
+
+    /// Exercise the `Display` representation of various types.
+    #[test]
+    fn display_repr() {
+        assert_eq!(
+            Reason::MissingSyms.to_string(),
+            "symbolization source has no or no relevant symbols"
+        );
+    }
+
+    /// Test the `Symbolized::*_sym()` conversion methods for the `Unknown`
+    /// variant.
+    #[test]
+    fn symbolized_unknown_conversions() {
+        let symbolized = Symbolized::Unknown(Reason::UnknownAddr);
+        assert_eq!(symbolized.as_sym(), None);
+        assert_eq!(symbolized.into_sym(), None);
     }
 }

@@ -25,9 +25,10 @@
 // > IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // > DEALINGS IN THE SOFTWARE.
 
+use crate::once::OnceCell;
+
 use super::function::Function;
 use super::function::Functions;
-use super::lazy::LazyCell;
 use super::lines::Lines;
 use super::location::Location;
 use super::location::LocationRangeUnitIter;
@@ -44,21 +45,21 @@ pub(super) struct UnitRange {
 pub(super) struct Unit<'dwarf> {
     dw_unit: gimli::Unit<R<'dwarf>>,
     lang: Option<gimli::DwLang>,
-    lines: LazyCell<Result<Lines<'dwarf>, gimli::Error>>,
-    funcs: LazyCell<Result<Functions<'dwarf>, gimli::Error>>,
+    lines: OnceCell<Lines<'dwarf>>,
+    funcs: OnceCell<Functions<'dwarf>>,
 }
 
 impl<'dwarf> Unit<'dwarf> {
     pub(super) fn new(
         unit: gimli::Unit<R<'dwarf>>,
         lang: Option<gimli::DwLang>,
-        lines: LazyCell<Result<Lines<'dwarf>, gimli::Error>>,
+        lines: OnceCell<Lines<'dwarf>>,
     ) -> Self {
         Self {
             dw_unit: unit,
             lang,
             lines,
-            funcs: LazyCell::new(),
+            funcs: OnceCell::new(),
         }
     }
 
@@ -80,33 +81,27 @@ impl<'dwarf> Unit<'dwarf> {
         sections: &gimli::Dwarf<R<'dwarf>>,
     ) -> Result<&'unit Functions<'dwarf>, gimli::Error> {
         let unit = &self.dw_unit;
-        let functions = self
-            .funcs
-            .borrow_with(|| {
-                let funcs = Functions::parse(unit, sections)?;
-                let () = funcs.parse_inlined_functions(unit, sections)?;
-                Ok(funcs)
-            })
-            .as_ref()
-            .map_err(gimli::Error::clone)?;
-        Ok(functions)
+
+        self.funcs.get_or_try_init(|| {
+            let funcs = Functions::parse(unit, sections)?;
+            let () = funcs.parse_inlined_functions(unit, sections)?;
+            Ok(funcs)
+        })
     }
 
     pub(super) fn parse_lines(
         &self,
         sections: &gimli::Dwarf<R<'dwarf>>,
     ) -> Result<Option<&Lines<'dwarf>>, gimli::Error> {
-        // NB: line information is always stored in the main debug file so this does not need
-        // to handle DWOs.
+        // NB: line information is always stored in the main debug file so this does not
+        // need to handle DWOs.
         let ilnp = match self.dw_unit.line_program {
             Some(ref ilnp) => ilnp,
             None => return Ok(None),
         };
         self.lines
-            .borrow_with(|| Lines::parse(&self.dw_unit, ilnp.clone(), sections))
-            .as_ref()
+            .get_or_try_init(|| Lines::parse(&self.dw_unit, ilnp.clone(), sections))
             .map(Some)
-            .map_err(gimli::Error::clone)
     }
 
     pub(super) fn find_location(
@@ -130,9 +125,7 @@ impl<'dwarf> Unit<'dwarf> {
         sections: &gimli::Dwarf<R<'dwarf>>,
     ) -> Result<&Functions<'dwarf>, gimli::Error> {
         self.funcs
-            .borrow_with(|| Functions::parse(unit, sections))
-            .as_ref()
-            .map_err(gimli::Error::clone)
+            .get_or_try_init(|| Functions::parse(unit, sections))
     }
 
     pub(super) fn find_function(

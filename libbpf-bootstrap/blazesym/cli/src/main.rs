@@ -44,7 +44,7 @@ fn normalize(normalize: args::Normalize) -> Result<()> {
     match normalize {
         args::Normalize::User(args::User { pid, addrs }) => {
             let normalized = normalizer
-                .normalize_user_addrs(addrs.as_slice(), pid)
+                .normalize_user_addrs(pid, addrs.as_slice())
                 .context("failed to normalize addresses")?;
             for (addr, (output, meta_idx)) in addrs.iter().zip(&normalized.outputs) {
                 print!("{addr:#016x}: ");
@@ -110,23 +110,29 @@ fn print_frame(
 /// The handler for the 'symbolize' command.
 fn symbolize(symbolize: args::Symbolize) -> Result<()> {
     let symbolizer = Symbolizer::new();
-    let (src, addrs) = match symbolize {
-        args::Symbolize::Elf(args::Elf { path, addrs }) => {
+    let (src, input, addrs) = match symbolize {
+        args::Symbolize::Elf(args::Elf { path, ref addrs }) => {
             let src = symbolize::Source::from(symbolize::Elf::new(path));
-            (src, addrs)
+            let addrs = addrs.as_slice();
+            let input = symbolize::Input::VirtOffset(addrs);
+            (src, input, addrs)
         }
-        args::Symbolize::Gsym(args::Gsym { path, addrs }) => {
+        args::Symbolize::Gsym(args::Gsym { path, ref addrs }) => {
             let src = symbolize::Source::from(symbolize::GsymFile::new(path));
-            (src, addrs)
+            let addrs = addrs.as_slice();
+            let input = symbolize::Input::VirtOffset(addrs);
+            (src, input, addrs)
         }
-        args::Symbolize::Process(args::Process { pid, addrs }) => {
+        args::Symbolize::Process(args::Process { pid, ref addrs }) => {
             let src = symbolize::Source::from(symbolize::Process::new(pid));
-            (src, addrs)
+            let addrs = addrs.as_slice();
+            let input = symbolize::Input::AbsAddr(addrs);
+            (src, input, addrs)
         }
     };
 
     let syms = symbolizer
-        .symbolize(&src, symbolize::Input::VirtOffset(&addrs))
+        .symbolize(&src, input)
         .context("failed to symbolize addresses")?;
 
     for (input_addr, sym) in addrs.iter().copied().zip(syms) {
@@ -144,7 +150,7 @@ fn symbolize(symbolize: args::Symbolize) -> Result<()> {
                     print_frame(&frame.name, None, &frame.code_info);
                 }
             }
-            symbolize::Symbolized::Unknown => {
+            symbolize::Symbolized::Unknown(..) => {
                 println!("{input_addr:#0width$x}: <no-symbol>", width = ADDR_WIDTH)
             }
         }

@@ -1,11 +1,11 @@
 //! **blazesym** is a library that can be used to symbolize addresses. Address
-//! symbolization is a common problem in tracing contexts, for example, where users
-//! want to reason about functions by name, but low level components report only the
-//! "raw" addresses (e.g., in the form of stacktraces).
+//! symbolization is a common problem in tracing contexts, for example, where
+//! users want to reason about functions by name, but low level components
+//! report only the "raw" addresses (e.g., in the form of stacktraces).
 //!
-//! In addition to symbolization, **blazesym** also provides APIs for the reverse
-//! operation: looking up addresses from symbol names. That can be useful, for
-//! example, for configuring breakpoints or tracepoints.
+//! In addition to symbolization, **blazesym** also provides APIs for the
+//! reverse operation: looking up addresses from symbol names. That can be
+//! useful, for example, for configuring breakpoints or tracepoints.
 //!
 //! ## Overview
 //! The crate is organized via public modules that expose functionality
@@ -17,9 +17,9 @@
 //! - [`normalize`] exposes address normalization functionality
 //!
 //! C API bindings are defined in a cross-cutting manner as part of the
-//! [`c_api`] module (note that Rust code should not have to consume these
-//! functions and on the ABI level this module organization has no relevance for
-//! C).
+//! `cblazesym` crate (note that Rust code should not have to consume
+//! these functions and on the ABI level this module organization has no
+//! relevance for C).
 
 #![allow(
     clippy::collapsible_if,
@@ -31,31 +31,41 @@
 #![warn(
     missing_debug_implementations,
     missing_docs,
+    clippy::absolute_paths,
     rustdoc::broken_intra_doc_links
 )]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(feature = "nightly", feature(test))]
-#![cfg_attr(not(feature = "dwarf"), allow(dead_code))]
+#![cfg_attr(
+    not(all(feature = "apk", feature = "dwarf", feature = "gsym")),
+    allow(dead_code, unused_imports)
+)]
 
 
 #[cfg(feature = "nightly")]
 extern crate test;
 
-pub mod c_api;
+#[macro_use]
+mod cfg;
 #[cfg(feature = "dwarf")]
 mod dwarf;
 mod elf;
 mod error;
 mod file_cache;
+#[cfg(feature = "gsym")]
 mod gsym;
+mod insert_map;
 pub mod inspect;
 mod kernel;
 mod ksym;
 mod maps;
 mod mmap;
 pub mod normalize;
+mod once;
 mod resolver;
 pub mod symbolize;
 mod util;
+#[cfg(feature = "apk")]
 mod zip;
 
 use std::fmt::Display;
@@ -65,12 +75,6 @@ use std::num::NonZeroU32;
 use std::result;
 
 use resolver::SymResolver;
-
-
-// We import all C API items during doc creation to not have to mention the
-// `c_api` module in, say, the README.
-#[cfg(doc)]
-use c_api::*;
 
 
 pub use crate::error::Error;
@@ -119,22 +123,19 @@ impl From<u32> for Pid {
 
 #[cfg(feature = "tracing")]
 #[macro_use]
+#[allow(unused_imports)]
 mod log {
-    #[allow(unused)]
     pub(crate) use tracing::debug;
     pub(crate) use tracing::error;
-
-    pub(crate) use tracing::instrument;
-
-    #[allow(unused)]
     pub(crate) use tracing::info;
-    #[allow(unused)]
+    pub(crate) use tracing::instrument;
     pub(crate) use tracing::trace;
     pub(crate) use tracing::warn;
 }
 
 #[cfg(not(feature = "tracing"))]
 #[macro_use]
+#[allow(unused_imports)]
 mod log {
     macro_rules! debug {
         ($($args:tt)*) => {{
@@ -145,12 +146,9 @@ mod log {
           }
         }};
     }
-    #[allow(unused)]
     pub(crate) use debug;
     pub(crate) use debug as error;
-    #[allow(unused)]
     pub(crate) use debug as info;
-    #[allow(unused)]
     pub(crate) use debug as trace;
     pub(crate) use debug as warn;
 }

@@ -1,23 +1,21 @@
 use std::borrow::Cow;
-use std::cell::RefCell;
-use std::collections::hash_map;
-use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fmt::Debug;
 use std::fs::File;
 use std::ops::Deref as _;
 use std::ops::Range;
 use std::path::Path;
+use std::path::PathBuf;
 use std::rc::Rc;
 
-#[cfg(feature = "dwarf")]
-use crate::dwarf::DwarfResolver;
 use crate::elf;
-use crate::elf::ElfBackend;
 use crate::elf::ElfParser;
 use crate::elf::ElfResolver;
+use crate::elf::ElfResolverData;
 use crate::file_cache::FileCache;
+#[cfg(feature = "gsym")]
 use crate::gsym::GsymResolver;
+use crate::insert_map::InsertMap;
 use crate::kernel::KernelResolver;
 use crate::ksym::KSymResolver;
 use crate::ksym::KALLSYMS;
@@ -26,11 +24,11 @@ use crate::maps;
 use crate::maps::PathMapsEntry;
 use crate::mmap::Mmap;
 use crate::normalize;
-use crate::normalize::create_apk_elf_path;
 use crate::normalize::normalize_sorted_user_addrs_with_entries;
 use crate::normalize::Handler as _;
 use crate::util;
 use crate::util::uname_release;
+#[cfg(feature = "apk")]
 use crate::zip;
 use crate::Addr;
 use crate::Error;
@@ -40,50 +38,78 @@ use crate::Pid;
 use crate::Result;
 use crate::SymResolver;
 
+#[cfg(feature = "apk")]
 use super::source::Apk;
 use super::source::Elf;
+#[cfg(feature = "gsym")]
 use super::source::Gsym;
+#[cfg(feature = "gsym")]
 use super::source::GsymData;
+#[cfg(feature = "gsym")]
 use super::source::GsymFile;
 use super::source::Kernel;
 use super::source::Process;
 use super::source::Source;
-use super::CodeInfo;
+use super::AddrCodeInfo;
 use super::InlinedFn;
 use super::Input;
 use super::IntSym;
+use super::Reason;
 use super::SrcLang;
 use super::Sym;
 use super::Symbolized;
 
 
+#[cfg(feature = "apk")]
+fn create_apk_elf_path(apk: &Path, elf: &Path) -> Result<PathBuf> {
+    let mut extension = apk
+        .extension()
+        .unwrap_or_else(|| OsStr::new("apk"))
+        .to_os_string();
+    // Append '!' to indicate separation from archive internal contents
+    // that follow. This is an Android convention.
+    let () = extension.push("!");
+
+    let mut apk = apk.to_path_buf();
+    if !apk.set_extension(extension) {
+        return Err(Error::with_invalid_data(format!(
+            "path {} is not valid",
+            apk.display()
+        )))
+    }
+
+    let path = apk.join(elf);
+    Ok(path)
+}
+
+
 /// Demangle a symbol name using the demangling scheme for the given language.
 #[cfg(feature = "demangle")]
-fn maybe_demangle(name: &str, language: SrcLang) -> Cow<'_, str> {
+fn maybe_demangle(name: Cow<'_, str>, language: SrcLang) -> Cow<'_, str> {
     match language {
-        SrcLang::Rust => rustc_demangle::try_demangle(name)
+        SrcLang::Rust => rustc_demangle::try_demangle(name.as_ref())
             .ok()
             .as_ref()
             .map(|x| Cow::Owned(format!("{x:#}"))),
-        SrcLang::Cpp => cpp_demangle::Symbol::new(name)
+        SrcLang::Cpp => cpp_demangle::Symbol::new(name.as_ref())
             .ok()
             .and_then(|x| x.demangle(&Default::default()).ok().map(Cow::Owned)),
-        SrcLang::Unknown => rustc_demangle::try_demangle(name)
+        SrcLang::Unknown => rustc_demangle::try_demangle(name.as_ref())
             .map(|x| Cow::Owned(format!("{x:#}")))
             .ok()
             .or_else(|| {
-                cpp_demangle::Symbol::new(name)
+                cpp_demangle::Symbol::new(name.as_ref())
                     .ok()
                     .and_then(|sym| sym.demangle(&Default::default()).ok().map(Cow::Owned))
             }),
     }
-    .unwrap_or(Cow::Borrowed(name))
+    .unwrap_or(name)
 }
 
 #[cfg(not(feature = "demangle"))]
-fn maybe_demangle(name: &str, _language: SrcLang) -> Cow<'_, str> {
+fn maybe_demangle(name: Cow<'_, str>, _language: SrcLang) -> Cow<'_, str> {
     // Demangling is disabled.
-    Cow::Borrowed(name)
+    name
 }
 
 
@@ -107,8 +133,6 @@ fn elf_offset_to_address(offset: u64, parser: &ElfParser) -> Result<Option<Addr>
 /// By default all features are enabled.
 #[derive(Clone, Debug)]
 pub struct Builder {
-    /// Whether to enable usage of debug symbols.
-    debug_syms: bool,
     /// Whether to attempt to gather source code location information.
     ///
     /// This setting implies usage of debug symbols and forces the corresponding
@@ -125,14 +149,6 @@ pub struct Builder {
 }
 
 impl Builder {
-    /// Enable/disable usage of debug symbols.
-    ///
-    /// That can be useful in cases where ELF symbol information is stripped.
-    pub fn enable_debug_syms(mut self, enable: bool) -> Builder {
-        self.debug_syms = enable;
-        self
-    }
-
     /// Enable/disable source code location information (line numbers,
     /// file names etc.).
     pub fn enable_code_info(mut self, enable: bool) -> Builder {
@@ -159,20 +175,18 @@ impl Builder {
     /// Create the [`Symbolizer`] object.
     pub fn build(self) -> Symbolizer {
         let Builder {
-            debug_syms,
             code_info,
             inlined_fns,
             demangle,
         } = self;
-        let apk_cache = RefCell::new(FileCache::new());
-        let elf_cache = RefCell::new(FileCache::new());
-        let ksym_cache = RefCell::new(FileCache::new());
 
         Symbolizer {
-            apk_cache,
-            elf_cache,
-            ksym_cache,
-            debug_syms,
+            #[cfg(feature = "apk")]
+            apk_cache: FileCache::new(),
+            elf_cache: FileCache::new(),
+            #[cfg(feature = "gsym")]
+            gsym_cache: FileCache::new(),
+            ksym_cache: FileCache::new(),
             code_info,
             inlined_fns,
             demangle,
@@ -183,12 +197,31 @@ impl Builder {
 impl Default for Builder {
     fn default() -> Self {
         Self {
-            debug_syms: true,
             code_info: true,
             inlined_fns: true,
             demangle: true,
         }
     }
+}
+
+
+/// An enumeration helping us to differentiate between cached and uncached
+/// symbol resolvers.
+///
+/// An "uncached" resolver is one that is created on the spot. We do so for
+/// cases when we keep the input data, for example (e.g., when we have no
+/// control over its lifetime).
+/// A "cached" resolver is one that ultimately lives in one of our internal
+/// caches. These caches have the same lifetime as the `Symbolizer` object
+/// itself (represented here as `'slf`).
+///
+/// Object of this type are at the core of our logic determining whether to
+/// heap allocate certain data such as paths or symbol names or whether to just
+/// hand out references to mmap'ed data.
+#[derive(Debug)]
+enum Resolver<'tmp, 'slf> {
+    Uncached(&'tmp (dyn SymResolver + 'tmp)),
+    Cached(&'slf dyn SymResolver),
 }
 
 
@@ -206,10 +239,12 @@ impl Default for Builder {
 #[derive(Debug)]
 pub struct Symbolizer {
     #[allow(clippy::type_complexity)]
-    apk_cache: RefCell<FileCache<(zip::Archive, HashMap<Range<u64>, Rc<ElfResolver>>)>>,
-    elf_cache: RefCell<FileCache<Rc<ElfResolver>>>,
-    ksym_cache: RefCell<FileCache<Rc<KSymResolver>>>,
-    debug_syms: bool,
+    #[cfg(feature = "apk")]
+    apk_cache: FileCache<(zip::Archive, InsertMap<Range<u64>, Rc<ElfResolver>>)>,
+    elf_cache: FileCache<ElfResolverData>,
+    #[cfg(feature = "gsym")]
+    gsym_cache: FileCache<Rc<GsymResolver<'static>>>,
+    ksym_cache: FileCache<Rc<KSymResolver>>,
     code_info: bool,
     inlined_fns: bool,
     demangle: bool,
@@ -228,70 +263,108 @@ impl Symbolizer {
     }
 
     /// Demangle the provided symbol if asked for and possible.
-    fn maybe_demangle<'sym>(&self, symbol: &'sym str, language: SrcLang) -> Cow<'sym, str> {
+    fn maybe_demangle<'sym>(&self, symbol: Cow<'sym, str>, language: SrcLang) -> Cow<'sym, str> {
         if self.demangle {
             maybe_demangle(symbol, language)
         } else {
-            Cow::Borrowed(symbol)
+            symbol
         }
     }
 
     /// Symbolize an address using the provided [`SymResolver`].
     #[cfg_attr(feature = "tracing", crate::log::instrument(skip_all, fields(addr = format_args!("{addr:#x}"), resolver = ?resolver)))]
-    fn symbolize_with_resolver(
-        &self,
+    fn symbolize_with_resolver<'slf>(
+        &'slf self,
         addr: Addr,
-        resolver: &dyn SymResolver,
-    ) -> Result<Symbolized> {
-        let sym = if let Some(sym) = resolver.find_sym(addr)? {
-            sym
-        } else {
-            return Ok(Symbolized::Unknown)
+        resolver: &Resolver<'_, 'slf>,
+    ) -> Result<Symbolized<'slf>> {
+        let (sym_name, sym_addr, sym_size, lang) = match resolver {
+            Resolver::Uncached(resolver) => match resolver.find_sym(addr)? {
+                Ok(sym) => {
+                    let IntSym {
+                        name: sym_name,
+                        addr: sym_addr,
+                        size: sym_size,
+                        lang,
+                    } = sym;
+
+                    (Cow::Owned(sym_name.to_string()), sym_addr, sym_size, lang)
+                }
+                Err(reason) => return Ok(Symbolized::Unknown(reason)),
+            },
+            Resolver::Cached(resolver) => match resolver.find_sym(addr)? {
+                Ok(sym) => {
+                    let IntSym {
+                        name: sym_name,
+                        addr: sym_addr,
+                        size: sym_size,
+                        lang,
+                    } = sym;
+
+                    (Cow::Borrowed(sym_name), sym_addr, sym_size, lang)
+                }
+                Err(reason) => return Ok(Symbolized::Unknown(reason)),
+            },
         };
 
-        let addr_code_info = if self.code_info {
-            resolver.find_code_info(addr, self.inlined_fns)?
-        } else {
-            None
-        };
-
-        let (name, code_info) = if let Some(info) = &addr_code_info {
-            let name = info.direct.0;
-            let code_info = &info.direct.1;
-            (name, Some(CodeInfo::from(code_info)))
-        } else {
-            (None, None)
-        };
-
-        let IntSym {
-            name: sym_name,
-            addr: sym_addr,
-            size: sym_size,
-            lang,
-        } = sym;
-
-        let inlined = if let Some(code_info) = &addr_code_info {
-            code_info
-                .inlined
-                .iter()
-                .map(|(name, info)| {
-                    let name = self.maybe_demangle(name, lang);
-                    let info = info.as_ref().map(CodeInfo::from);
-                    InlinedFn {
-                        name: name.to_string(),
-                        code_info: info,
-                        _non_exhaustive: (),
+        let (name, code_info, inlined) = if self.code_info {
+            match resolver {
+                Resolver::Uncached(resolver) => {
+                    let addr_code_info = resolver.find_code_info(addr, self.inlined_fns)?;
+                    if let Some(AddrCodeInfo {
+                        direct: (direct_name, direct_code_info),
+                        inlined,
+                    }) = addr_code_info
+                    {
+                        let direct_name = direct_name.map(|name| Cow::Owned(name.to_string()));
+                        let direct_code_info = direct_code_info.to_owned();
+                        let inlined = inlined
+                            .into_iter()
+                            .map(|(name, info)| {
+                                let name = self.maybe_demangle(Cow::Owned(name.to_string()), lang);
+                                InlinedFn {
+                                    name,
+                                    code_info: info.map(|info| info.to_owned()),
+                                    _non_exhaustive: (),
+                                }
+                            })
+                            .collect();
+                        (direct_name, Some(direct_code_info), inlined)
+                    } else {
+                        (None, None, Vec::new())
                     }
-                })
-                .collect()
+                }
+                Resolver::Cached(resolver) => {
+                    let addr_code_info = resolver.find_code_info(addr, self.inlined_fns)?;
+                    if let Some(AddrCodeInfo {
+                        direct: (direct_name, direct_code_info),
+                        inlined,
+                    }) = addr_code_info
+                    {
+                        let direct_name = direct_name.map(Cow::Borrowed);
+                        let inlined = inlined
+                            .into_iter()
+                            .map(|(name, info)| {
+                                let name = self.maybe_demangle(Cow::Borrowed(name), lang);
+                                InlinedFn {
+                                    name,
+                                    code_info: info,
+                                    _non_exhaustive: (),
+                                }
+                            })
+                            .collect();
+                        (direct_name, Some(direct_code_info), inlined)
+                    } else {
+                        (None, None, Vec::new())
+                    }
+                }
+            }
         } else {
-            Vec::new()
+            (None, None, Vec::new())
         };
 
         let sym = Sym {
-            name: self
-                .maybe_demangle(name.unwrap_or(sym_name), lang)
-                .to_string(),
+            name: self.maybe_demangle(name.unwrap_or(sym_name), lang),
             addr: sym_addr,
             offset: (addr - sym_addr) as usize,
             size: sym_size,
@@ -303,10 +376,10 @@ impl Symbolizer {
     }
 
     /// Symbolize a list of addresses using the provided [`SymResolver`].
-    fn symbolize_addrs(
-        &self,
+    fn symbolize_addrs<'slf>(
+        &'slf self,
         addrs: &[Addr],
-        resolver: &dyn SymResolver,
+        resolver: &Resolver<'_, 'slf>,
     ) -> Result<Vec<Symbolized>> {
         addrs
             .iter()
@@ -314,76 +387,61 @@ impl Symbolizer {
             .collect()
     }
 
-    fn elf_resolver_from_parser(
-        &self,
-        path: &Path,
-        parser: Rc<ElfParser>,
-    ) -> Result<Rc<ElfResolver>> {
-        #[cfg(feature = "dwarf")]
-        let backend = if self.debug_syms {
-            ElfBackend::Dwarf(Rc::new(DwarfResolver::from_parser(parser, self.code_info)?))
-        } else {
-            ElfBackend::Elf(parser)
-        };
+    #[cfg(feature = "gsym")]
+    fn create_gsym_resolver(&self, path: &Path, file: &File) -> Result<Rc<GsymResolver<'static>>> {
+        let resolver = GsymResolver::from_file(path.to_path_buf(), file)?;
+        Ok(Rc::new(resolver))
+    }
 
-        #[cfg(not(feature = "dwarf"))]
-        let backend = ElfBackend::Elf(parser);
-        let resolver = Rc::new(ElfResolver::with_backend(path, backend)?);
+    #[cfg(feature = "gsym")]
+    fn gsym_resolver<'slf>(&'slf self, path: &Path) -> Result<&'slf Rc<GsymResolver<'static>>> {
+        let (file, cell) = self.gsym_cache.entry(path)?;
+        let resolver = cell.get_or_try_init(|| self.create_gsym_resolver(path, file))?;
         Ok(resolver)
     }
 
-    fn create_elf_resolver(&self, path: &Path, file: &File) -> Result<Rc<ElfResolver>> {
-        let parser = Rc::new(ElfParser::open_file(file)?);
-        self.elf_resolver_from_parser(path, parser)
-    }
-
-    fn elf_resolver(&self, path: &Path) -> Result<Rc<ElfResolver>> {
-        let mut cache = self.elf_cache.borrow_mut();
-        let (file, resolver) = cache.entry(path)?;
-        if resolver.is_none() {
-            *resolver = Some(self.create_elf_resolver(path, file)?);
-        }
-        // SANITY: A resolver is always present at this point.
-        Ok(resolver.as_ref().unwrap().clone())
-    }
-
-    fn create_apk_resolver(
-        &self,
+    #[cfg(feature = "apk")]
+    fn create_apk_resolver<'slf>(
+        &'slf self,
         apk: &zip::Archive,
         apk_path: &Path,
         file_off: u64,
-        resolver_map: &mut HashMap<Range<u64>, Rc<ElfResolver>>,
-    ) -> Result<Option<(Rc<ElfResolver>, Addr)>> {
+        debug_syms: bool,
+        resolver_map: &'slf InsertMap<Range<u64>, Rc<ElfResolver>>,
+    ) -> Result<Option<(&'slf Rc<ElfResolver>, Addr)>> {
         // Find the APK entry covering the calculated file offset.
         for apk_entry in apk.entries() {
             let apk_entry = apk_entry?;
             let bounds = apk_entry.data_offset..apk_entry.data_offset + apk_entry.data.len() as u64;
 
             if bounds.contains(&file_off) {
-                let resolver = match resolver_map.entry(bounds.clone()) {
-                    hash_map::Entry::Occupied(occupied) => occupied.into_mut(),
-                    hash_map::Entry::Vacant(vacancy) => {
-                        let mmap =
-                            apk.mmap()
-                                .constrain(bounds.clone())
-                                .ok_or_invalid_input(|| {
-                                    format!(
-                                        "invalid APK entry data bounds ({bounds:?}) in {}",
-                                        apk_path.display()
-                                    )
-                                })?;
-                        // Create an Android-style binary-in-APK path for
-                        // reporting purposes.
-                        let apk_elf_path = create_apk_elf_path(apk_path, apk_entry.path)?;
-                        let parser = Rc::new(ElfParser::from_mmap(mmap));
-                        let resolver = self.elf_resolver_from_parser(&apk_elf_path, parser)?;
-                        vacancy.insert(resolver)
-                    }
-                };
+                let resolver = resolver_map.get_or_try_insert(bounds.clone(), || {
+                    let mmap = apk
+                        .mmap()
+                        .constrain(bounds.clone())
+                        .ok_or_invalid_input(|| {
+                            format!(
+                                "invalid APK entry data bounds ({bounds:?}) in {}",
+                                apk_path.display()
+                            )
+                        })?;
+                    // Create an Android-style binary-in-APK path for
+                    // reporting purposes.
+                    let apk_elf_path = create_apk_elf_path(apk_path, apk_entry.path)?;
+                    let parser = Rc::new(ElfParser::from_mmap(mmap));
+                    let resolver = ElfResolver::from_parser(
+                        &apk_elf_path,
+                        parser,
+                        debug_syms,
+                        self.code_info,
+                    )?;
+                    let resolver = Rc::new(resolver);
+                    Ok(resolver)
+                })?;
 
                 let elf_off = file_off - apk_entry.data_offset;
                 if let Some(addr) = elf_offset_to_address(elf_off, resolver.parser())? {
-                    return Ok(Some((resolver.clone(), addr)))
+                    return Ok(Some((resolver, addr)))
                 }
                 break
             }
@@ -392,50 +450,68 @@ impl Symbolizer {
         Ok(None)
     }
 
-    fn apk_resolver(&self, path: &Path, file_off: u64) -> Result<Option<(Rc<ElfResolver>, Addr)>> {
-        let mut cache = self.apk_cache.borrow_mut();
-        let (file, data) = cache.entry(path)?;
-        if data.is_none() {
+    #[cfg(feature = "apk")]
+    fn apk_resolver<'slf>(
+        &'slf self,
+        path: &Path,
+        file_off: u64,
+        debug_syms: bool,
+    ) -> Result<Option<(&'slf Rc<ElfResolver>, Addr)>> {
+        let (file, cell) = self.apk_cache.entry(path)?;
+        let (apk, resolvers) = cell.get_or_try_init(|| {
             let apk = zip::Archive::with_mmap(Mmap::builder().map(file)?)?;
-            let resolvers = HashMap::new();
-            *data = Some((apk, resolvers))
-        }
+            let resolvers = InsertMap::new();
+            Result::<_, Error>::Ok((apk, resolvers))
+        })?;
 
-        // SANITY: A resolver is always present at this point.
-        let (apk, ref mut resolvers) = data.as_mut().unwrap();
-        let result = self.create_apk_resolver(apk, path, file_off, resolvers);
+        let result = self.create_apk_resolver(apk, path, file_off, debug_syms, resolvers);
         result
     }
 
-    fn resolve_addr_in_elf(&self, addr: Addr, path: &Path) -> Result<Symbolized> {
-        let resolver = self.elf_resolver(path)?;
-        let symbolized = self.symbolize_with_resolver(addr, resolver.deref())?;
+    fn resolve_addr_in_elf(&self, addr: Addr, path: &Path, debug_syms: bool) -> Result<Symbolized> {
+        let resolver = self
+            .elf_cache
+            .elf_resolver(path, debug_syms, self.code_info)?;
+        let symbolized = self.symbolize_with_resolver(addr, &Resolver::Cached(resolver.deref()))?;
         Ok(symbolized)
     }
 
     /// Symbolize the given list of user space addresses in the provided
     /// process.
-    fn symbolize_user_addrs(&self, addrs: &[Addr], pid: Pid) -> Result<Vec<Symbolized>> {
+    fn symbolize_user_addrs(
+        &self,
+        addrs: &[Addr],
+        pid: Pid,
+        debug_syms: bool,
+    ) -> Result<Vec<Symbolized>> {
         struct SymbolizeHandler<'sym> {
             /// The "outer" `Symbolizer` instance.
             symbolizer: &'sym Symbolizer,
+            /// Whether or not to consult debug symbols to satisfy the request
+            /// (if present).
+            debug_syms: bool,
             /// Symbols representing the symbolized addresses.
-            all_symbols: Vec<Symbolized>,
+            all_symbols: Vec<Symbolized<'sym>>,
         }
 
         impl SymbolizeHandler<'_> {
+            #[cfg(feature = "apk")]
             fn handle_apk_addr(&mut self, addr: Addr, entry: &PathMapsEntry) -> Result<()> {
                 let file_off = addr - entry.range.start + entry.offset;
                 let apk_path = &entry.path.symbolic_path;
-                match self.symbolizer.apk_resolver(apk_path, file_off)? {
+                match self
+                    .symbolizer
+                    .apk_resolver(apk_path, file_off, self.debug_syms)?
+                {
                     Some((elf_resolver, elf_addr)) => {
-                        let symbol = self
-                            .symbolizer
-                            .symbolize_with_resolver(elf_addr, elf_resolver.deref())?;
+                        let symbol = self.symbolizer.symbolize_with_resolver(
+                            elf_addr,
+                            &Resolver::Cached(elf_resolver.deref()),
+                        )?;
                         let () = self.all_symbols.push(symbol);
                         Ok(())
                     }
-                    None => self.handle_unknown_addr(addr),
+                    None => self.handle_unknown_addr(addr, Reason::InvalidFileOffset),
                 }
             }
 
@@ -450,7 +526,7 @@ impl Symbolizer {
                     Some(norm_addr) => {
                         let symbol = self
                             .symbolizer
-                            .resolve_addr_in_elf(norm_addr, path)
+                            .resolve_addr_in_elf(norm_addr, path, self.debug_syms)
                             .with_context(|| {
                                 format!(
                                     "failed to symbolize normalized address {norm_addr:#x} in ELF file {}",
@@ -460,15 +536,15 @@ impl Symbolizer {
                         let () = self.all_symbols.push(symbol);
                         Ok(())
                     }
-                    None => self.handle_unknown_addr(addr),
+                    None => self.handle_unknown_addr(addr, Reason::InvalidFileOffset),
                 }
             }
         }
 
-        impl normalize::Handler for SymbolizeHandler<'_> {
+        impl normalize::Handler<Reason> for SymbolizeHandler<'_> {
             #[cfg_attr(feature = "tracing", crate::log::instrument(skip_all, fields(addr = format_args!("{_addr:#x}"))))]
-            fn handle_unknown_addr(&mut self, _addr: Addr) -> Result<()> {
-                let () = self.all_symbols.push(Symbolized::Unknown);
+            fn handle_unknown_addr(&mut self, _addr: Addr, reason: Reason) -> Result<()> {
+                let () = self.all_symbols.push(Symbolized::Unknown(reason));
                 Ok(())
             }
 
@@ -479,6 +555,7 @@ impl Symbolizer {
                     .extension()
                     .unwrap_or_else(|| OsStr::new(""));
                 match ext.to_str() {
+                    #[cfg(feature = "apk")]
                     Some("apk") | Some("zip") => self.handle_apk_addr(addr, entry),
                     _ => self.handle_elf_addr(addr, entry),
                 }
@@ -488,13 +565,21 @@ impl Symbolizer {
         let entries = maps::parse(pid)?;
         let handler = SymbolizeHandler {
             symbolizer: self,
+            debug_syms,
             all_symbols: Vec::with_capacity(addrs.len()),
         };
 
         let handler = util::with_ordered_elems(
             addrs,
             |handler: &mut SymbolizeHandler<'_>| handler.all_symbols.as_mut_slice(),
-            |sorted_addrs| normalize_sorted_user_addrs_with_entries(sorted_addrs, entries, handler),
+            |sorted_addrs| {
+                normalize_sorted_user_addrs_with_entries(
+                    sorted_addrs,
+                    entries,
+                    handler,
+                    Reason::Unmapped,
+                )
+            },
         )?;
         Ok(handler.all_symbols)
     }
@@ -506,20 +591,17 @@ impl Symbolizer {
         Ok(resolver)
     }
 
-    fn ksym_resolver(&self, path: &Path) -> Result<Rc<KSymResolver>> {
-        let mut cache = self.ksym_cache.borrow_mut();
-        let (file, resolver) = cache.entry(path)?;
-        if resolver.is_none() {
-            *resolver = Some(self.create_ksym_resolver(path, file)?);
-        }
-        // SANITY: A resolver is always present at this point.
-        Ok(resolver.as_ref().unwrap().clone())
+    fn ksym_resolver<'slf>(&'slf self, path: &Path) -> Result<&'slf Rc<KSymResolver>> {
+        let (file, cell) = self.ksym_cache.entry(path)?;
+        let resolver = cell.get_or_try_init(|| self.create_ksym_resolver(path, file))?;
+        Ok(resolver)
     }
 
     fn create_kernel_resolver(&self, src: &Kernel) -> Result<KernelResolver> {
         let Kernel {
             kallsyms,
             kernel_image,
+            debug_syms,
             _non_exhaustive: (),
         } = src;
 
@@ -542,7 +624,9 @@ impl Symbolizer {
         };
 
         let elf_resolver = if let Some(image) = kernel_image {
-            let resolver = self.elf_resolver(image)?;
+            let resolver = self
+                .elf_cache
+                .elf_resolver(image, *debug_syms, self.code_info)?;
             Some(resolver)
         } else {
             let release = uname_release()?.to_str().unwrap().to_string();
@@ -554,7 +638,9 @@ impl Symbolizer {
             });
 
             if let Some(image) = kernel_image {
-                let result = self.elf_resolver(&image);
+                let result = self
+                    .elf_cache
+                    .elf_resolver(&image, *debug_syms, self.code_info);
                 match result {
                     Ok(resolver) => Some(resolver),
                     Err(err) => {
@@ -570,7 +656,7 @@ impl Symbolizer {
             }
         };
 
-        KernelResolver::new(ksym_resolver, elf_resolver)
+        KernelResolver::new(ksym_resolver.cloned(), elf_resolver.cloned())
     }
 
     /// Symbolize a list of addresses.
@@ -601,10 +687,16 @@ impl Symbolizer {
     /// |        | source code location information | no                   | N/A                    |
     /// |        | inlined function information     | no                   | N/A                    |
     #[cfg_attr(feature = "tracing", crate::log::instrument(skip_all, fields(src = ?src, addrs = format_args!("{input:#x?}"))))]
-    pub fn symbolize(&self, src: &Source, input: Input<&[u64]>) -> Result<Vec<Symbolized>> {
+    pub fn symbolize<'slf>(
+        &'slf self,
+        src: &Source,
+        input: Input<&[u64]>,
+    ) -> Result<Vec<Symbolized<'slf>>> {
         match src {
+            #[cfg(feature = "apk")]
             Source::Apk(Apk {
                 path,
+                debug_syms,
                 _non_exhaustive: (),
             }) => match input {
                 Input::VirtOffset(..) => {
@@ -619,23 +711,31 @@ impl Symbolizer {
                 }
                 Input::FileOffset(offsets) => offsets
                     .iter()
-                    .map(|offset| match self.apk_resolver(path, *offset)? {
-                        Some((elf_resolver, elf_addr)) => {
-                            self.symbolize_with_resolver(elf_addr, elf_resolver.deref())
-                        }
-                        None => Ok(Symbolized::Unknown),
-                    })
+                    .map(
+                        |offset| match self.apk_resolver(path, *offset, *debug_syms)? {
+                            Some((elf_resolver, elf_addr)) => self.symbolize_with_resolver(
+                                elf_addr,
+                                &Resolver::Cached(elf_resolver.deref()),
+                            ),
+                            None => Ok(Symbolized::Unknown(Reason::InvalidFileOffset)),
+                        },
+                    )
                     .collect(),
             },
             Source::Elf(Elf {
                 path,
+                debug_syms,
                 _non_exhaustive: (),
             }) => {
-                let resolver = self.elf_resolver(path)?;
+                let resolver = self
+                    .elf_cache
+                    .elf_resolver(path, *debug_syms, self.code_info)?;
                 match input {
                     Input::VirtOffset(addrs) => addrs
                         .iter()
-                        .map(|addr| self.symbolize_with_resolver(*addr, resolver.deref()))
+                        .map(|addr| {
+                            self.symbolize_with_resolver(*addr, &Resolver::Cached(resolver.deref()))
+                        })
                         .collect(),
                     Input::AbsAddr(..) => {
                         return Err(Error::with_unsupported(
@@ -646,8 +746,11 @@ impl Symbolizer {
                         .iter()
                         .map(
                             |offset| match elf_offset_to_address(*offset, resolver.parser())? {
-                                Some(addr) => self.symbolize_with_resolver(addr, resolver.deref()),
-                                None => Ok(Symbolized::Unknown),
+                                Some(addr) => self.symbolize_with_resolver(
+                                    addr,
+                                    &Resolver::Cached(resolver.deref()),
+                                ),
+                                None => Ok(Symbolized::Unknown(Reason::InvalidFileOffset)),
                             },
                         )
                         .collect(),
@@ -668,12 +771,13 @@ impl Symbolizer {
                     }
                 };
 
-                let resolver = self.create_kernel_resolver(kernel)?;
-                let symbols = self.symbolize_addrs(addrs, &resolver)?;
+                let resolver = Rc::new(self.create_kernel_resolver(kernel)?);
+                let symbols = self.symbolize_addrs(addrs, &Resolver::Uncached(resolver.deref()))?;
                 Ok(symbols)
             }
             Source::Process(Process {
                 pid,
+                debug_syms,
                 _non_exhaustive: (),
             }) => {
                 let addrs = match input {
@@ -690,8 +794,9 @@ impl Symbolizer {
                     }
                 };
 
-                self.symbolize_user_addrs(addrs, *pid)
+                self.symbolize_user_addrs(addrs, *pid, *debug_syms)
             }
+            #[cfg(feature = "gsym")]
             Source::Gsym(Gsym::Data(GsymData {
                 data,
                 _non_exhaustive: (),
@@ -710,10 +815,11 @@ impl Symbolizer {
                     }
                 };
 
-                let resolver = GsymResolver::with_data(data)?;
-                let symbols = self.symbolize_addrs(addrs, &resolver)?;
+                let resolver = Rc::new(GsymResolver::with_data(data)?);
+                let symbols = self.symbolize_addrs(addrs, &Resolver::Uncached(resolver.deref()))?;
                 Ok(symbols)
             }
+            #[cfg(feature = "gsym")]
             Source::Gsym(Gsym::File(GsymFile {
                 path,
                 _non_exhaustive: (),
@@ -732,10 +838,11 @@ impl Symbolizer {
                     }
                 };
 
-                let resolver = GsymResolver::new(path.clone())?;
-                let symbols = self.symbolize_addrs(addrs, &resolver)?;
+                let resolver = self.gsym_resolver(path)?;
+                let symbols = self.symbolize_addrs(addrs, &Resolver::Cached(resolver.deref()))?;
                 Ok(symbols)
             }
+            Source::Phantom(()) => unreachable!(),
         }
     }
 
@@ -745,10 +852,16 @@ impl Symbolizer {
     /// using [`symbolize`][Self::symbolize]. However, in cases where only a
     /// single address is available, this method provides a more convenient API.
     #[cfg_attr(feature = "tracing", crate::log::instrument(skip_all, fields(src = ?src, input = format_args!("{input:#x?}"))))]
-    pub fn symbolize_single(&self, src: &Source, input: Input<u64>) -> Result<Symbolized> {
+    pub fn symbolize_single<'slf>(
+        &'slf self,
+        src: &Source,
+        input: Input<u64>,
+    ) -> Result<Symbolized<'slf>> {
         match src {
+            #[cfg(feature = "apk")]
             Source::Apk(Apk {
                 path,
+                debug_syms,
                 _non_exhaustive: (),
             }) => match input {
                 Input::VirtOffset(..) => {
@@ -761,18 +874,20 @@ impl Symbolizer {
                         "APK symbolization does not support absolute address inputs",
                     ))
                 }
-                Input::FileOffset(offset) => match self.apk_resolver(path, offset)? {
-                    Some((elf_resolver, elf_addr)) => {
-                        self.symbolize_with_resolver(elf_addr, elf_resolver.deref())
-                    }
-                    None => return Ok(Symbolized::Unknown),
+                Input::FileOffset(offset) => match self.apk_resolver(path, offset, *debug_syms)? {
+                    Some((elf_resolver, elf_addr)) => self
+                        .symbolize_with_resolver(elf_addr, &Resolver::Cached(elf_resolver.deref())),
+                    None => return Ok(Symbolized::Unknown(Reason::InvalidFileOffset)),
                 },
             },
             Source::Elf(Elf {
                 path,
+                debug_syms,
                 _non_exhaustive: (),
             }) => {
-                let resolver = self.elf_resolver(path)?;
+                let resolver = self
+                    .elf_cache
+                    .elf_resolver(path, *debug_syms, self.code_info)?;
                 let addr = match input {
                     Input::VirtOffset(addr) => addr,
                     Input::AbsAddr(..) => {
@@ -783,12 +898,12 @@ impl Symbolizer {
                     Input::FileOffset(offset) => {
                         match elf_offset_to_address(offset, resolver.parser())? {
                             Some(addr) => addr,
-                            None => return Ok(Symbolized::Unknown),
+                            None => return Ok(Symbolized::Unknown(Reason::InvalidFileOffset)),
                         }
                     }
                 };
 
-                self.symbolize_with_resolver(addr, resolver.deref())
+                self.symbolize_with_resolver(addr, &Resolver::Cached(resolver.deref()))
             }
             Source::Kernel(kernel) => {
                 let addr = match input {
@@ -805,11 +920,12 @@ impl Symbolizer {
                     }
                 };
 
-                let resolver = self.create_kernel_resolver(kernel)?;
-                self.symbolize_with_resolver(addr, &resolver)
+                let resolver = Rc::new(self.create_kernel_resolver(kernel)?);
+                self.symbolize_with_resolver(addr, &Resolver::Uncached(resolver.deref()))
             }
             Source::Process(Process {
                 pid,
+                debug_syms,
                 _non_exhaustive: (),
             }) => {
                 let addr = match input {
@@ -826,10 +942,14 @@ impl Symbolizer {
                     }
                 };
 
-                let mut symbols = self.symbolize_user_addrs(&[addr], *pid)?;
-                debug_assert!(symbols.len() <= 1, "{symbols:#?}");
-                Ok(symbols.pop().unwrap_or(Symbolized::Unknown))
+                let mut symbols = self.symbolize_user_addrs(&[addr], *pid, *debug_syms)?;
+                debug_assert!(symbols.len() == 1, "{symbols:#?}");
+                // SANITY: `symbolize_user_addrs` should *always* return
+                //         one result for one input (except on error
+                //         paths, of course).
+                Ok(symbols.pop().unwrap())
             }
+            #[cfg(feature = "gsym")]
             Source::Gsym(Gsym::Data(GsymData {
                 data,
                 _non_exhaustive: (),
@@ -848,9 +968,10 @@ impl Symbolizer {
                     }
                 };
 
-                let resolver = GsymResolver::with_data(data)?;
-                self.symbolize_with_resolver(addr, &resolver)
+                let resolver = Rc::new(GsymResolver::with_data(data)?);
+                self.symbolize_with_resolver(addr, &Resolver::Uncached(resolver.deref()))
             }
+            #[cfg(feature = "gsym")]
             Source::Gsym(Gsym::File(GsymFile {
                 path,
                 _non_exhaustive: (),
@@ -869,9 +990,10 @@ impl Symbolizer {
                     }
                 };
 
-                let resolver = GsymResolver::new(path.clone())?;
-                self.symbolize_with_resolver(addr, &resolver)
+                let resolver = self.gsym_resolver(path)?;
+                self.symbolize_with_resolver(addr, &Resolver::Cached(resolver.deref()))
             }
+            Source::Phantom(()) => unreachable!(),
         }
     }
 }
@@ -887,17 +1009,15 @@ impl Default for Symbolizer {
 mod tests {
     use super::*;
 
-    use std::ffi::OsString;
     use std::mem::transmute;
-    use std::path::PathBuf;
 
     use crate::elf::ElfParser;
     use crate::inspect::FindAddrOpts;
     use crate::inspect::SymType;
     use crate::mmap::Mmap;
     use crate::symbolize;
+    use crate::symbolize::CodeInfo;
     use crate::symbolize::Symbolizer;
-    use crate::zip;
     use crate::ErrorKind;
 
     use test_log::test;
@@ -913,20 +1033,49 @@ mod tests {
         assert_ne!(format!("{symbolizer:?}"), "");
     }
 
+    /// Check that we can create a path to an ELF inside an APK as expected.
+    #[cfg(feature = "apk")]
+    #[test]
+    fn elf_apk_path_creation() {
+        let apk = Path::new("/root/test.apk");
+        let elf = Path::new("subdir/libc.so");
+        let path = create_apk_elf_path(apk, elf).unwrap();
+        assert_eq!(path, Path::new("/root/test.apk!/subdir/libc.so"));
+    }
+
     /// Check that we can correctly construct the source code path to a symbol.
     #[test]
     fn symbol_source_code_path() {
         let mut info = CodeInfo {
             dir: None,
-            file: OsString::from("source.c"),
+            file: Cow::Borrowed(OsStr::new("source.c")),
             line: Some(1),
             column: Some(2),
             _non_exhaustive: (),
         };
         assert_eq!(info.to_path(), Path::new("source.c"));
 
-        info.dir = Some(PathBuf::from("/foobar"));
+        info.dir = Some(Cow::Borrowed(Path::new("/foobar")));
         assert_eq!(info.to_path(), Path::new("/foobar/source.c"));
+    }
+
+    /// Make sure that we can demangle symbols.
+    #[test]
+    fn demangle() {
+        if !cfg!(feature = "demangle") {
+            return
+        }
+
+        let symbol = Cow::Borrowed("_ZN4core9panicking9panic_fmt17h5f1a6fd39197ad62E");
+        let name = maybe_demangle(symbol, SrcLang::Rust);
+        assert_eq!(name, "core::panicking::panic_fmt");
+
+        let symbol = Cow::Borrowed("_ZStlsISt11char_traitsIcEERSt13basic_ostreamIcT_ES5_PKc");
+        let name = maybe_demangle(symbol, SrcLang::Cpp);
+        assert_eq!(
+            name,
+            "std::basic_ostream<char, std::char_traits<char> >& std::operator<< <std::char_traits<char> >(std::basic_ostream<char, std::char_traits<char> >&, char const*)"
+        );
     }
 
     /// Make sure that we error out as expected on certain input
@@ -956,13 +1105,11 @@ mod tests {
                 ][..],
             ),
             (
-                symbolize::Source::Elf(symbolize::Elf::new(&test_elf)),
+                symbolize::Source::Elf(symbolize::Elf::new(test_elf)),
                 &[Input::AbsAddr([46].as_slice())][..],
             ),
             (
-                symbolize::Source::Gsym(symbolize::Gsym::File(symbolize::GsymFile::new(
-                    &test_gsym,
-                ))),
+                symbolize::Source::Gsym(symbolize::Gsym::File(symbolize::GsymFile::new(test_gsym))),
                 &[
                     Input::AbsAddr([48].as_slice()),
                     Input::FileOffset([49].as_slice()),
@@ -984,8 +1131,11 @@ mod tests {
     }
 
     /// Check that we can symbolize an address residing in a zip archive.
+    #[cfg(feature = "apk")]
     #[test]
     fn symbolize_zip() {
+        use crate::zip;
+
         let test_zip = Path::new(&env!("CARGO_MANIFEST_DIR"))
             .join("data")
             .join("test.zip");

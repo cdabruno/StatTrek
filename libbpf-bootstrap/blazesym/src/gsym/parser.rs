@@ -81,7 +81,8 @@ impl GsymContext<'_> {
     ///
     /// * `data` - is the content of a standalone GSYM.
     ///
-    /// Returns a GsymContext, which includes the Header and other important tables.
+    /// Returns a GsymContext, which includes the Header and other important
+    /// tables.
     pub fn parse_header(data: &[u8]) -> Result<GsymContext> {
         fn parse_header_impl(mut data: &[u8]) -> Option<Result<GsymContext>> {
             let head = data;
@@ -140,8 +141,8 @@ impl GsymContext<'_> {
             .ok_or_invalid_data(|| "GSYM data does not contain sufficient bytes")?
     }
 
-    /// Find the index of an entry in the address table potentially containing the
-    /// given address.
+    /// Find the index of an entry in the address table potentially containing
+    /// the given address.
     ///
     /// Callers should check the `AddrInfo` object at the returned index to see
     /// whether the symbol actually covers the provided address.
@@ -171,7 +172,7 @@ impl GsymContext<'_> {
     /// Get the address of an entry in the Address Table.
     pub fn addr_at(&self, idx: usize) -> Option<Addr> {
         let addr_off_size = self.header.addr_off_size as usize;
-        let mut data = self.addr_tab.get(idx * addr_off_size..)?;
+        let mut data = self.addr_tab.get(idx.checked_mul(addr_off_size)?..)?;
         let addr = match addr_off_size {
             1 => data.read_u8()?.into(),
             2 => data.read_u16()?.into(),
@@ -179,7 +180,7 @@ impl GsymContext<'_> {
             8 => data.read_u64()? as Addr,
             _ => return None,
         };
-        Some(self.header.base_address as Addr + addr)
+        (self.header.base_address as Addr).checked_add(addr)
     }
 
     /// Get the AddrInfo of an address given by an index.

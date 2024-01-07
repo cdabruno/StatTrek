@@ -7,24 +7,29 @@ use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::fmt::Debug;
 use std::mem;
+use std::mem::ManuallyDrop;
 use std::ops::Deref as _;
 use std::os::raw::c_char;
 use std::os::unix::ffi::OsStrExt as _;
 use std::os::unix::ffi::OsStringExt as _;
-use std::path::Path;
 use std::path::PathBuf;
 use std::ptr;
 
 #[cfg(doc)]
-use crate::inspect;
-use crate::inspect::Elf;
-use crate::inspect::Inspector;
-use crate::inspect::Source;
-use crate::inspect::SymInfo;
-use crate::inspect::SymType;
-use crate::log::error;
-use crate::util::slice_from_user_array;
-use crate::Addr;
+use blazesym::inspect;
+use blazesym::inspect::Elf;
+use blazesym::inspect::Inspector;
+use blazesym::inspect::Source;
+use blazesym::inspect::SymInfo;
+use blazesym::inspect::SymType;
+use blazesym::Addr;
+
+use crate::from_cstr;
+use crate::slice_from_user_array;
+
+
+/// C ABI compatible version of [`blazesym::inspect::Inspector`].
+pub type blaze_inspector = Inspector;
 
 
 /// An object representing an ELF inspection source.
@@ -35,51 +40,49 @@ use crate::Addr;
 pub struct blaze_inspect_elf_src {
     /// The path to the ELF file. This member is always present.
     pub path: *const c_char,
-    /// Whether or not to consult debug information to satisfy the request (if
-    /// present).
-    pub debug_info: bool,
+    /// Whether or not to consult debug symbols to satisfy the request
+    /// (if present).
+    pub debug_syms: bool,
 }
 
-impl From<Elf> for blaze_inspect_elf_src {
-    fn from(other: Elf) -> Self {
+#[cfg_attr(not(test), allow(unused))]
+impl blaze_inspect_elf_src {
+    fn from(other: Elf) -> ManuallyDrop<Self> {
         let Elf {
             path,
-            debug_info,
+            debug_syms,
             _non_exhaustive: (),
         } = other;
-        Self {
+
+        let slf = Self {
             path: CString::new(path.into_os_string().into_vec())
                 .expect("encountered path with NUL bytes")
                 .into_raw(),
-            debug_info,
-        }
+            debug_syms,
+        };
+        ManuallyDrop::new(slf)
     }
-}
 
-impl From<blaze_inspect_elf_src> for Elf {
-    fn from(other: blaze_inspect_elf_src) -> Self {
-        let blaze_inspect_elf_src { path, debug_info } = other;
+    unsafe fn free(self) {
+        let Self { path, debug_syms } = self;
 
-        Elf {
+        let _elf = Elf {
             path: PathBuf::from(OsString::from_vec(
                 unsafe { CString::from_raw(path as *mut _) }.into_bytes(),
             )),
-            debug_info,
+            debug_syms,
             _non_exhaustive: (),
-        }
+        };
     }
 }
 
 impl From<&blaze_inspect_elf_src> for Elf {
     fn from(other: &blaze_inspect_elf_src) -> Self {
-        let blaze_inspect_elf_src { path, debug_info } = other;
+        let blaze_inspect_elf_src { path, debug_syms } = other;
 
-        Elf {
-            path: Path::new(OsStr::from_bytes(
-                unsafe { CStr::from_ptr(*path) }.to_bytes(),
-            ))
-            .to_path_buf(),
-            debug_info: *debug_info,
+        Self {
+            path: unsafe { from_cstr(*path) },
+            debug_syms: *debug_syms,
             _non_exhaustive: (),
         }
     }
@@ -240,7 +243,7 @@ fn convert_syms_list_to_c(syms_list: Vec<Vec<SymInfo>>) -> *const *const blaze_s
 /// needs to be a valid pointer to `name_cnt` strings.
 #[no_mangle]
 pub unsafe extern "C" fn blaze_inspect_syms_elf(
-    inspector: *const Inspector,
+    inspector: *const blaze_inspector,
     src: *const blaze_inspect_elf_src,
     names: *const *const c_char,
     name_cnt: usize,
@@ -259,13 +262,10 @@ pub unsafe extern "C" fn blaze_inspect_syms_elf(
             unsafe { CStr::from_ptr(p) }.to_str().unwrap()
         })
         .collect::<Vec<_>>();
-    let result = inspector.lookup(&names, &src);
+    let result = inspector.lookup(&src, &names);
     match result {
         Ok(syms) => convert_syms_list_to_c(syms),
-        Err(err) => {
-            error!("failed to lookup symbols: {err}");
-            ptr::null()
-        }
+        Err(_err) => ptr::null(),
     }
 }
 
@@ -275,7 +275,6 @@ pub unsafe extern "C" fn blaze_inspect_syms_elf(
 /// # Safety
 ///
 /// The pointer must be returned by [`blaze_inspect_syms_elf`].
-///
 #[no_mangle]
 pub unsafe extern "C" fn blaze_inspect_syms_free(syms: *const *const blaze_sym_info) {
     if syms.is_null() {
@@ -293,7 +292,7 @@ pub unsafe extern "C" fn blaze_inspect_syms_free(syms: *const *const blaze_sym_i
 /// The returned pointer should be released using
 /// [`blaze_inspector_free`] once it is no longer needed.
 #[no_mangle]
-pub extern "C" fn blaze_inspector_new() -> *mut Inspector {
+pub extern "C" fn blaze_inspector_new() -> *mut blaze_inspector {
     let inspector = Inspector::new();
     let inspector_box = Box::new(inspector);
     Box::into_raw(inspector_box)
@@ -309,7 +308,7 @@ pub extern "C" fn blaze_inspector_new() -> *mut Inspector {
 /// The provided inspector should have been created by
 /// [`blaze_inspector_new`].
 #[no_mangle]
-pub unsafe extern "C" fn blaze_inspector_free(inspector: *mut Inspector) {
+pub unsafe extern "C" fn blaze_inspector_free(inspector: *mut blaze_inspector) {
     if !inspector.is_null() {
         // SAFETY: The caller needs to ensure that `inspector` is a
         //         valid pointer.
@@ -322,6 +321,12 @@ pub unsafe extern "C" fn blaze_inspector_free(inspector: *mut Inspector) {
 mod tests {
     use super::*;
 
+    use std::ffi::CStr;
+    use std::ffi::CString;
+    use std::path::Path;
+    use std::ptr;
+    use std::slice;
+
     use test_log::test;
 
 
@@ -330,11 +335,11 @@ mod tests {
     fn debug_repr() {
         let elf = blaze_inspect_elf_src {
             path: ptr::null(),
-            debug_info: true,
+            debug_syms: true,
         };
         assert_eq!(
             format!("{elf:?}"),
-            "blaze_inspect_elf_src { path: 0x0, debug_info: true }"
+            "blaze_inspect_elf_src { path: 0x0, debug_syms: true }"
         );
 
         let info = blaze_sym_info {
@@ -461,5 +466,43 @@ mod tests {
         // Test conversion of many `SymInfo` vectors.
         let syms = (0..200).map(|_| vec![sym.clone()]).collect();
         test(syms);
+    }
+
+    /// Make sure that we can create and free an inspector instance.
+    #[test]
+    fn inspector_creation() {
+        let inspector = blaze_inspector_new();
+        let () = unsafe { blaze_inspector_free(inspector) };
+    }
+
+    /// Make sure that we can lookup a function's address using DWARF
+    /// information.
+    #[test]
+    fn lookup_dwarf() {
+        let test_dwarf = Path::new(&env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("data")
+            .join("test-stable-addresses-dwarf-only.bin");
+
+        let src = blaze_inspect_elf_src::from(Elf::new(test_dwarf));
+        let factorial = CString::new("factorial").unwrap();
+        let names = [factorial.as_ptr()];
+
+        let inspector = blaze_inspector_new();
+        let result =
+            unsafe { blaze_inspect_syms_elf(inspector, &*src, names.as_ptr(), names.len()) };
+        let () = unsafe { ManuallyDrop::into_inner(src).free() };
+        assert!(!result.is_null());
+
+        let sym_infos = unsafe { slice::from_raw_parts(result, names.len()) };
+        let sym_info = unsafe { &*sym_infos[0] };
+        assert_eq!(
+            unsafe { CStr::from_ptr(sym_info.name) },
+            CStr::from_bytes_with_nul(b"factorial\0").unwrap()
+        );
+        assert_eq!(sym_info.addr, 0x2000100);
+
+        let () = unsafe { blaze_inspect_syms_free(result) };
+        let () = unsafe { blaze_inspector_free(inspector) };
     }
 }

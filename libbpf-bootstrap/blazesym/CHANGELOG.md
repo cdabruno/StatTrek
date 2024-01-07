@@ -1,3 +1,32 @@
+Unreleased
+----------
+- Introduced `symbolize::Reason` enum to provide best guess at
+  why symbolization was not successful as part of the
+  `symbolize::Symbolized::Unknown` variant
+- Introduced `apk` and `gsym` compile-time features (disabled by default)
+- Improved handling of dynamic ELF symbols for symbolization and
+  inspection
+- Reordered `pid` argument to normalization functions before addresses
+- Reordered `src` argument to inspection functions before names
+
+
+0.2.0-alpha.9
+-------------
+- Added caching logic for Gsym resolvers to `symbolize::Symbolizer`
+- Adjusted various symbolization related types to contain `Cow` objects to
+  facilitate hand out of memory mapped data without unnecessary allocations
+  - Adjusted various symbolization code paths to stop heap-allocating
+- Adjusted normalization logic to honor executable and readable proc maps
+  entries
+- Changed `debug_syms` to be a symbolization source property instead of a
+  `symbolize::Symbolizer` attribute
+- Renamed `inspect::Elf::debug_info` to `debug_syms`
+- Handled potential numeric overflow in Gsym inlined function parser more
+  gracefully
+- Moved C API definitions into `blazesym-c` crate
+- Fixed build for some Android flavors
+
+
 0.2.0-alpha.8
 -------------
 - Fixed build failure when `dwarf` feature is not enabled

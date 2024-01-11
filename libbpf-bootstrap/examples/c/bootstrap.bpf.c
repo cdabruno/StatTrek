@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
-/* Copyright (c) 2020 Facebook */
 #include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
@@ -12,7 +10,7 @@ struct {
 	__uint(max_entries, 8192);
 	__type(key, pid_t);
 	__type(value, u64);
-} exec_start SEC(".maps");
+} packet_count SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_RINGBUF);
@@ -28,6 +26,17 @@ int xdp_pass(struct xdp_md *ctx)
 	void *data_end = (void *)(long)ctx->data_end;
 	int pkt_sz = data_end - data;
 
-	bpf_printk("packet size: ");
+	int key = 0;
+
+	u64 *count = bpf_map_lookup_elem(&packet_count, &key);
+	if (count) {
+		(*count)++;
+	} else {
+		u64 new_count = 1;
+		bpf_map_update_elem(&packet_count, &key, &new_count, BPF_ANY);
+	}
+
+	bpf_printk("packet size: %d\n", pkt_sz);
+
 	return XDP_PASS;
 }

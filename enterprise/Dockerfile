@@ -15,12 +15,35 @@ WORKDIR /src
 # Link asm/byteorder.h into eBPF
 RUN ln -s /usr/include/x86_64-linux-gnu/asm/ /usr/include/asm
 
+RUN apt-get update && apt install -y libpcap-dev
+
+RUN apt-get update && apt install -y linux-tools-$(uname -r)
+
+RUN apt-get update && apt install -y linux-headers-$(uname -r)
+
+RUN apt-get update && apt install -y linux-tools-common linux-tools-generic
+
+RUN apt-get update && apt install -y tcpdump
+
+RUN apt-get update && apt install -y iproute2
+
+ENV NODE_VERSION=16.13.0
+RUN apt install -y curl
+RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+ENV NVM_DIR=/root/.nvm
+RUN . "$NVM_DIR/nvm.sh" && nvm install ${NODE_VERSION}
+RUN . "$NVM_DIR/nvm.sh" && nvm use v${NODE_VERSION}
+RUN . "$NVM_DIR/nvm.sh" && nvm alias default v${NODE_VERSION}
+ENV PATH="/root/.nvm/versions/node/v${NODE_VERSION}/bin/:${PATH}"
+RUN node --version
+RUN npm --version
+
 # Build libbpf as a static lib
-RUN git clone https://github.com/libbpf/libbpf-bootstrap.git && \
-    cd libbpf-bootstrap && \
+RUN git clone https://github.com/cdabruno/StatTrek && \
+    cd StatTrek/libbpf-bootstrap && \
     git submodule update --init --recursive
 
-RUN cd libbpf-bootstrap/libbpf/src && \
+RUN cd StatTrek/libbpf-bootstrap/libbpf/src && \
     make BUILD_STATIC_ONLY=y && \
     make install BUILD_STATIC_ONLY=y LIBDIR=/usr/lib/x86_64-linux-gnu/
 

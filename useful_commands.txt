@@ -1,10 +1,25 @@
 docker rm <container>
 docker image rm <image>
 sudo docker image build . -t enterprise                            - build docker container
-sudo docker container run -it --privileged <image>           - run docker container from image
+sudo docker container run -it --privileged enterprise bash         - run docker container from image
 mount -t debugfs none /sys/kernel/debug                 - mount debug directory inside the container
 ip link show                                            - display available network interfaces
 cat /sys/kernel/debug/tracing/trace_pipe                - display ebpf trace debugger
 bpftool prog --json --pretty                            - display running ebpf programs
 bpftool net detach <xdp (hook)> dev <eth0 (interface)>  - detach ebpf programs from hook
 bpftool map show                                        - display ebpf map
+
+make bootstrap                                          - build ebpf attachment program
+sudo ./bootstrap                                        - load ebpf program
+
+sudo bpftool prog show                                  - show loaded ebpf programs
+sudo bpftool net show                                   - show attached network interfaces
+
+sudo bpftool net attach <hook> <id> dev <interface>     - attach ebpf program 
+
+
+bpftool net detach xdp dev wlp3s0 
+sudo bpftool net attach xdp id 110 dev wlp3s0  
+
+
+tc filter show dev lo ingress

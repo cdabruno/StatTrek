@@ -11,32 +11,39 @@ int tc_ingress(struct __sk_buff *ctx)
 {
 	void *data_end = (void *)(__u64)ctx->data_end;
 	void *data = (void *)(__u64)ctx->data;
-	struct ethhdr *l2;
-	struct iphdr *l3;
+	struct ethhdr *eth;
+	struct iphdr *iph;
+    struct tcphdr *tcph;
 
 	if (ctx->protocol != bpf_htons(ETH_P_IP))
 		return TC_ACT_OK;
 
-	l2 = data;
-	if ((void *)(l2 + 1) > data_end)
+	eth = data;
+	if ((void *)(eth + 1) > data_end)
 		return TC_ACT_OK;
 
-	l3 = (struct iphdr *)(l2 + 1);
-	if ((void *)(l3 + 1) > data_end)
+	iph = (struct iphdr *)(eth + 1);
+	if ((void *)(iph + 1) > data_end)
 		return TC_ACT_OK;
+    tcph = data + sizeof(*eth) + sizeof(*iph);
+    if ((void *)tcph + sizeof(*tcph) > data_end) {
+        return TC_ACT_OK;
+    }
+
+    char sourceIP[64] = {};
+    char destIP[64] = {};
 
 
-    bpf_printk("The IP address is %d\n", l3->daddr & 0xFF);
-    bpf_printk("The IP address is %d\n", (l3->daddr >> 8) & 0xFF);
-    bpf_printk("The IP address is %d\n", (l3->daddr >> 16) & 0xFF);
-    bpf_printk("The IP address is %d\n", (l3->daddr >> 24) & 0xFF);
+    BPF_SNPRINTF(sourceIP, sizeof(sourceIP), "%d.%d.%d.%d", (iph->saddr) & 0xFF, (iph->saddr >> 8) & 0xFF, (iph->saddr >> 16) & 0xFF, (iph->saddr >> 24) & 0xFF);
+    BPF_SNPRINTF(destIP, sizeof(destIP), "%d.%d.%d.%d", (iph->daddr) & 0xFF, (iph->daddr >> 8) & 0xFF, (iph->daddr >> 16) & 0xFF, (iph->daddr >> 24) & 0xFF);
 
-    bpf_printk("The IP address is %d\n", l3->saddr & 0xFF);
-    bpf_printk("The IP address is %d\n", (l3->saddr >> 8) & 0xFF);
-    bpf_printk("The IP address is %d\n", (l3->saddr >> 16) & 0xFF);
-    bpf_printk("The IP address is %d\n", (l3->saddr >> 24) & 0xFF);
+    bpf_printk("Got IP packet: tot_len: %d, ttl: %d", bpf_ntohs(iph->tot_len), iph->ttl);
 
-	bpf_printk("Got IP packet: tot_len: %d, ttl: %d", bpf_ntohs(l3->tot_len), l3->ttl);
+    bpf_printk("The source IP address is %s\n", sourceIP);
+    bpf_printk("The source port is %d\n", tcph->source);
+    bpf_printk("The destination IP address is %s\n", destIP);
+    bpf_printk("The destination port is %d\n", tcph->dest);
+
 	return TC_ACT_OK;
 }
 

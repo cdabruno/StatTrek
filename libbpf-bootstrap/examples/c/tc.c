@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include "tc.skel.h"
 
+// network interface hook
 #define LO_IFINDEX 16
 
 static volatile sig_atomic_t exiting = 0;
@@ -67,7 +68,7 @@ int main(int argc, char **argv)
 	       "to see output of the BPF program.\n");
 
 	while (!exiting) {
-		fprintf(stderr, ".");
+		//fprintf(stderr, ".");
 		sleep(1);
 	}
 

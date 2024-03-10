@@ -23,3 +23,6 @@ sudo bpftool net attach xdp id 110 dev wlp3s0
 
 
 tc filter show dev lo ingress
+
+kubectl get services
+kubectl get pods

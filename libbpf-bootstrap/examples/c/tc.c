@@ -5,7 +5,7 @@
 #include "tc.skel.h"
 
 // network interface hook
-#define LO_IFINDEX 16
+#define LO_IFINDEX 8
 
 static volatile sig_atomic_t exiting = 0;
 

@@ -24,5 +24,7 @@ sudo bpftool net attach xdp id 110 dev wlp3s0
 
 tc filter show dev lo ingress
 
-kubectl get services
-kubectl get pods
+minikube start                                           - starts cluster
+
+kubectl get services                                     - get running services
+kubectl get pods                                         - get running pods

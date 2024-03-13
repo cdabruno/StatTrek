@@ -6,6 +6,13 @@
 #define TC_ACT_OK 0
 #define ETH_P_IP  0x0800 /* Internet Protocol packet	*/
 
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(max_entries, 8192);
+	__type(key, u32);
+	__type(value, u64);
+} timestamp_map SEC(".maps");
+
 SEC("tc")
 int tc_ingress(struct __sk_buff *ctx)
 {
@@ -33,16 +40,39 @@ int tc_ingress(struct __sk_buff *ctx)
     char sourceIP[64] = {};
     char destIP[64] = {};
 
+    u64 timestamp = bpf_ktime_get_ns();
+
+    int key = 0;
+    u64 delta;
+
+    u64 *oldTimestamp = bpf_map_lookup_elem(&timestamp_map, &key);
+
+    u64 oldValue;
+
+	if (oldTimestamp) {
+		delta = timestamp - *oldTimestamp;
+        oldValue = *oldTimestamp;
+        (*oldTimestamp) = timestamp;
+	} else {
+		bpf_map_update_elem(&timestamp_map, &key, &timestamp, BPF_ANY);
+        return TC_ACT_OK;
+	}    
 
     BPF_SNPRINTF(sourceIP, sizeof(sourceIP), "%d.%d.%d.%d", (iph->saddr) & 0xFF, (iph->saddr >> 8) & 0xFF, (iph->saddr >> 16) & 0xFF, (iph->saddr >> 24) & 0xFF);
     BPF_SNPRINTF(destIP, sizeof(destIP), "%d.%d.%d.%d", (iph->daddr) & 0xFF, (iph->daddr >> 8) & 0xFF, (iph->daddr >> 16) & 0xFF, (iph->daddr >> 24) & 0xFF);
 
+
+    bpf_printk("Old timestamp: %llu, new timestamp: %llu", oldValue, timestamp);
+
+    /*
     bpf_printk("Got IP packet: tot_len: %d, ttl: %d", bpf_ntohs(iph->tot_len), iph->ttl);
 
     bpf_printk("The source IP address is %s\n", sourceIP);
     bpf_printk("The source port is %d\n", tcph->source);
     bpf_printk("The destination IP address is %s\n", destIP);
     bpf_printk("The destination port is %d\n", tcph->dest);
+
+    */
 
 	return TC_ACT_OK;
 }

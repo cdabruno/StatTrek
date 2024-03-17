@@ -7,7 +7,7 @@ ip link show                                            - display available netw
 cat /sys/kernel/debug/tracing/trace_pipe                - display ebpf trace debugger
 bpftool prog --json --pretty                            - display running ebpf programs
 bpftool net detach <xdp (hook)> dev <eth0 (interface)>  - detach ebpf programs from hook
-bpftool map show                                        - display ebpf map
+bpftool map show                                        -kubectl create deployment hello-node --image=registry.k8s.io/e2e-test-images/agnhost:2.39 -- /agnhost netexec --http-port=8080 display ebpf map
 
 make bootstrap                                          - build ebpf attachment program
 sudo ./bootstrap                                        - load ebpf program
@@ -21,10 +21,13 @@ sudo bpftool net attach <hook> <id> dev <interface>     - attach ebpf program
 bpftool net detach xdp dev wlp3s0 
 sudo bpftool net attach xdp id 110 dev wlp3s0  
 
+bpftool map dump name timestamp_map                      - dump map data
+
 
 tc filter show dev lo ingress
 
 minikube start                                           - starts cluster
+minikube service hello-node                              - open service
 
 kubectl get services                                     - get running services
 kubectl get pods                                         - get running pods

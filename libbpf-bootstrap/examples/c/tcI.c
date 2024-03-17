@@ -2,7 +2,7 @@
 /* Copyright (c) 2022 Hengqi Chen */
 #include <signal.h>
 #include <unistd.h>
-#include "tc.skel.h"
+#include "tcI.skel.h"
 
 // network interface hook
 #define LO_IFINDEX 8
@@ -21,17 +21,16 @@ static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va
 
 int main(int argc, char **argv)
 {
-	DECLARE_LIBBPF_OPTS(bpf_tc_hook, tc_hook, .ifindex = LO_IFINDEX,
+	DECLARE_LIBBPF_OPTS(bpf_tc_hook, tcI_hook, .ifindex = LO_IFINDEX,
 			    .attach_point = BPF_TC_INGRESS);
                 
-	DECLARE_LIBBPF_OPTS(bpf_tc_opts, tc_opts, .handle = 1, .priority = 1);
-	bool hook_created = false;
-	struct tc_bpf *skel;
+	DECLARE_LIBBPF_OPTS(bpf_tc_opts, tcI_opts, .handle = 1, .priority = 1);
+	struct tcI_bpf *skel;
 	int err;
 
 	libbpf_set_print(libbpf_print_fn);
 
-	skel = tc_bpf__open_and_load();
+	skel = tcI_bpf__open_and_load();
 	if (!skel) {
 		fprintf(stderr, "Failed to open BPF skeleton\n");
 		return 1;
@@ -40,19 +39,17 @@ int main(int argc, char **argv)
 	/* The hook (i.e. qdisc) may already exists because:
 	 *   1. it is created by other processes or users
 	 *   2. or since we are attaching to the TC ingress ONLY,
-	 *      bpf_tc_hook_destroy does NOT really remove the qdisc,
+	 *      bpf_tcI_hook_destroy does NOT really remove the qdisc,
 	 *      there may be an egress filter on the qdisc
 	 */
-	err = bpf_tc_hook_create(&tc_hook);
-	if (!err)
-		hook_created = true;
+	err = bpf_tc_hook_create(&tcI_hook);
 	if (err && err != -EEXIST) {
 		fprintf(stderr, "Failed to create TC hook: %d\n", err);
 		goto cleanup;
 	}
 
-	tc_opts.prog_fd = bpf_program__fd(skel->progs.tc_ingress);
-	err = bpf_tc_attach(&tc_hook, &tc_opts);
+	tcI_opts.prog_fd = bpf_program__fd(skel->progs.tc_ingress);
+	err = bpf_tc_attach(&tcI_hook, &tcI_opts);
 	if (err) {
 		fprintf(stderr, "Failed to attach TC: %d\n", err);
 		goto cleanup;
@@ -72,16 +69,17 @@ int main(int argc, char **argv)
 		sleep(1);
 	}
 
-	tc_opts.flags = tc_opts.prog_fd = tc_opts.prog_id = 0;
-	err = bpf_tc_detach(&tc_hook, &tc_opts);
+	tcI_opts.flags = tcI_opts.prog_fd = tcI_opts.prog_id = 0;
+	err = bpf_tc_detach(&tcI_hook, &tcI_opts);
 	if (err) {
 		fprintf(stderr, "Failed to detach TC: %d\n", err);
 		goto cleanup;
 	}
 
 cleanup:
-	if (hook_created)
-		bpf_tc_hook_destroy(&tc_hook);
-	tc_bpf__destroy(skel);
+	tcI_opts.flags = tcI_opts.prog_fd = tcI_opts.prog_id = 0;
+	bpf_tc_detach(&tcI_hook, &tcI_opts);
+	bpf_tc_hook_destroy(&tcI_hook);
+	tcI_bpf__destroy(skel);
 	return -err;
 }

@@ -14,7 +14,7 @@ struct {
 } timestamp_map SEC(".maps");
 
 SEC("tc")
-int tc_ingress(struct __sk_buff *ctx)
+int tc_egress(struct __sk_buff *ctx)
 {
 	void *data_end = (void *)(__u64)ctx->data_end;
 	void *data = (void *)(__u64)ctx->data;
@@ -42,7 +42,8 @@ int tc_ingress(struct __sk_buff *ctx)
 
     u64 timestamp = bpf_ktime_get_ns();
 
-    int key = 0;
+    int key = 1;
+    int value = 1;
     u64 delta;
 
     u64 *oldTimestamp = bpf_map_lookup_elem(&timestamp_map, &key);
@@ -54,7 +55,7 @@ int tc_ingress(struct __sk_buff *ctx)
         oldValue = *oldTimestamp;
         (*oldTimestamp) = timestamp;
 	} else {
-		bpf_map_update_elem(&timestamp_map, &key, &timestamp, BPF_ANY);
+		bpf_map_update_elem(&timestamp_map, &key, &value, BPF_ANY);
         return TC_ACT_OK;
 	}    
 

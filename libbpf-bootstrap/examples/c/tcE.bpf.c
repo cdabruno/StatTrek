@@ -9,9 +9,9 @@
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, 8192);
-	__type(key, u32);
-	__type(value, u64);
-} timestamp_map SEC(".maps");
+	__type(key, char[15]);
+	__type(value, char[20]);
+} egress_map SEC(".maps");
 
 SEC("tc")
 int tc_egress(struct __sk_buff *ctx)
@@ -37,16 +37,16 @@ int tc_egress(struct __sk_buff *ctx)
         return TC_ACT_OK;
     }
 
-    char sourceIP[64] = {};
-    char destIP[64] = {};
+    char sourceIP[40] = {};
+    char destIP[40] = {};
 
     u64 timestamp = bpf_ktime_get_ns();
 
-    int key = 1;
-    int value = 1;
+    //int key = 0;
+    int value = 2;
     u64 delta;
 
-    u64 *oldTimestamp = bpf_map_lookup_elem(&timestamp_map, &key);
+    /*u64 *oldTimestamp = bpf_map_lookup_elem(&egress_map, &key);
 
     u64 oldValue;
 
@@ -55,17 +55,33 @@ int tc_egress(struct __sk_buff *ctx)
         oldValue = *oldTimestamp;
         (*oldTimestamp) = timestamp;
 	} else {
-		bpf_map_update_elem(&timestamp_map, &key, &value, BPF_ANY);
+		bpf_map_update_elem(&egress_map, &key, &value, BPF_ANY);
         return TC_ACT_OK;
-	}    
+	}   */
+
+    char dataKey[100] = {};
+    char timestampData[20] = {};
 
     BPF_SNPRINTF(sourceIP, sizeof(sourceIP), "%d.%d.%d.%d", (iph->saddr) & 0xFF, (iph->saddr >> 8) & 0xFF, (iph->saddr >> 16) & 0xFF, (iph->saddr >> 24) & 0xFF);
     BPF_SNPRINTF(destIP, sizeof(destIP), "%d.%d.%d.%d", (iph->daddr) & 0xFF, (iph->daddr >> 8) & 0xFF, (iph->daddr >> 16) & 0xFF, (iph->daddr >> 24) & 0xFF);
+    
+    BPF_SNPRINTF(dataKey, sizeof(dataKey), "%s,%s,%d,%d", sourceIP, destIP, tcph->source, tcph->dest);
+    BPF_SNPRINTF(timestampData, sizeof(timestampData), "%llu", timestamp);
+    char oldTimestamp[100] = "";
+    
+    
+    /*oldTimestamp =  bpf_map_lookup_elem(&egress_map, &key);
+    if(oldTimestamp){
+        bpf_printk("Old timestamp: %s", oldTimestamp);
+    }*/
+
+    bpf_map_update_elem(&egress_map, &dataKey, &timestampData, BPF_ANY);/*
 
 
+/*
     bpf_printk("Old timestamp: %llu, new timestamp: %llu", oldValue, timestamp);
 
-    /*
+    
     bpf_printk("Got IP packet: tot_len: %d, ttl: %d", bpf_ntohs(iph->tot_len), iph->ttl);
 
     bpf_printk("The source IP address is %s\n", sourceIP);

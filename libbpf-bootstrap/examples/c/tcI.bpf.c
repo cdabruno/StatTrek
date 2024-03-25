@@ -9,9 +9,9 @@
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, 8192);
-	__type(key, char[100]);
+	__type(key, char[15]);
 	__type(value, char[20]);
-} timestamp_map SEC(".maps");
+} ingress_map SEC(".maps");
 
 SEC("tc")
 int tc_ingress(struct __sk_buff *ctx)
@@ -46,7 +46,7 @@ int tc_ingress(struct __sk_buff *ctx)
     int value = 2;
     u64 delta;
 
-    /*u64 *oldTimestamp = bpf_map_lookup_elem(&timestamp_map, &key);
+    /*u64 *oldTimestamp = bpf_map_lookup_elem(&ingress_map, &key);
 
     u64 oldValue;
 
@@ -55,7 +55,7 @@ int tc_ingress(struct __sk_buff *ctx)
         oldValue = *oldTimestamp;
         (*oldTimestamp) = timestamp;
 	} else {
-		bpf_map_update_elem(&timestamp_map, &key, &value, BPF_ANY);
+		bpf_map_update_elem(&ingress_map, &key, &value, BPF_ANY);
         return TC_ACT_OK;
 	}   */
 
@@ -70,12 +70,12 @@ int tc_ingress(struct __sk_buff *ctx)
     char oldTimestamp[100] = "";
     
     
-    /*oldTimestamp =  bpf_map_lookup_elem(&timestamp_map, &key);
+    /*oldTimestamp =  bpf_map_lookup_elem(&ingress_map, &key);
     if(oldTimestamp){
         bpf_printk("Old timestamp: %s", oldTimestamp);
     }*/
 
-    bpf_map_update_elem(&timestamp_map, &dataKey, &timestampData, BPF_ANY);/*
+    bpf_map_update_elem(&ingress_map, &dataKey, &timestampData, BPF_ANY);/*
 
 
 /*

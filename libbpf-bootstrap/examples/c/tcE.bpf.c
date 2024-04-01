@@ -10,7 +10,7 @@ struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, 8192);
 	__type(key, char[15]);
-	__type(value, char[20]);
+	__type(value, char);
 } egress_map SEC(".maps");
 
 SEC("tc")
@@ -21,6 +21,8 @@ int tc_egress(struct __sk_buff *ctx)
 	struct ethhdr *eth;
 	struct iphdr *iph;
     struct tcphdr *tcph;
+
+    if ( __bpf_ntohs ( eth->h_proto ) == ETH_P_IP ) {
 
 	if (ctx->protocol != bpf_htons(ETH_P_IP))
 		return TC_ACT_OK;
@@ -68,6 +70,8 @@ int tc_egress(struct __sk_buff *ctx)
     BPF_SNPRINTF(dataKey, sizeof(dataKey), "%s,%s,%d,%d", sourceIP, destIP, tcph->source, tcph->dest);
     BPF_SNPRINTF(timestampData, sizeof(timestampData), "%llu", timestamp);
     char oldTimestamp[100] = "";
+
+    char version = iph->version+'0';
     
     
     /*oldTimestamp =  bpf_map_lookup_elem(&egress_map, &key);
@@ -75,7 +79,7 @@ int tc_egress(struct __sk_buff *ctx)
         bpf_printk("Old timestamp: %s", oldTimestamp);
     }*/
 
-    bpf_map_update_elem(&egress_map, &dataKey, &timestampData, BPF_ANY);/*
+    bpf_map_update_elem(&egress_map, &dataKey, &version, BPF_ANY);/*
 
 
 /*
@@ -90,6 +94,13 @@ int tc_egress(struct __sk_buff *ctx)
     bpf_printk("The destination port is %d\n", tcph->dest);
 
     */
+
+    }
+    else{
+        //char key[15] = "aaaaaaaa";
+        //char dummy = "a";
+        //bpf_map_update_elem(&egress_map, &key, &dummy, BPF_ANY);
+    }
 
 	return TC_ACT_OK;
 }

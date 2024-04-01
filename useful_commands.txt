@@ -31,3 +31,9 @@ minikube service hello-node                              - open service
 
 kubectl get services                                     - get running services
 kubectl get pods                                         - get running pods
+
+minikube mount $HOME:/host                               - mount local files in minikube
+
+docker ps | grep -i <service-id>                             - get container for given pod
+docker inspect <container-id> | grep -i sandboxkey         - get container sandboxkey
+sudo nsenter --net=/var/run/docker/netns/47713f1e42ef ethtool -S eth0 | grep -i peer       - get veth id in node net interfaces

@@ -9,7 +9,7 @@
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, 8192);
-	__type(key, char[15]);
+	__type(key, char[100]);
 	__type(value, char[20]);
 } ingress_map SEC(".maps");
 
@@ -70,6 +70,7 @@ int tc_ingress(struct __sk_buff *ctx)
     char oldTimestamp[100] = "";
     
     
+    //char dummy[15] = "111.111.111.111,111.111.111.111,321,123";
     /*oldTimestamp =  bpf_map_lookup_elem(&ingress_map, &key);
     if(oldTimestamp){
         bpf_printk("Old timestamp: %s", oldTimestamp);

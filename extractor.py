@@ -60,20 +60,34 @@ for bpf_map in get_map_ids():
 
 timestamps_hash = {}
 
-for entry in formatted_maps[0]['entries']:
-    print(entry)
-    timestamps_hash[entry['key']] = entry['value']
+for map in formatted_maps:
+    for entry in map['entries']:
+        #print(entry)
+        timestamps_hash[entry['key']] = entry['value']
 
 delays_map = {}
 
-for entryB in formatted_maps[1]['entries']:
-    split_entry = entryB['key'].split(",")
-    inverted_entry = split_entry[1] + "," + split_entry[0] + "," + split_entry[3] + "," + split_entry[2]
+#print(timestamps_hash)
+
+
+for key in timestamps_hash:
+    #print(key, int(timestamps_hash[key]))
+    split_key = key.split(",")
+    inverted_entry = split_key[1] + "," + split_key[0] + "," + split_key[3] + "," + split_key[2]
     if(timestamps_hash.get(inverted_entry)):
-        delays_map[inverted_entry] = int(entryB['value']) - int(timestamps_hash[inverted_entry])
+        delta_time = int(timestamps_hash[key]) - int(timestamps_hash[inverted_entry])
+        delta_time_seconds = delta_time / 1000000000
+        if(delta_time > 0):
+            delays_map[inverted_entry] = delta_time_seconds
+        else:
+            delays_map[key] = delta_time_seconds * -1
+    else:
+        delays_map[key] = "DELAYED RESPONSE"
+
+print(len(timestamps_hash))
 
 for entry in delays_map:
-    print(delays_map[entry])
+    print(entry, delays_map[entry])
          
         
          

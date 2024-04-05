@@ -60,8 +60,12 @@ int tc_egress(struct __sk_buff *ctx)
         return TC_ACT_OK;
 	}   */
 
+    __u8 fin = tcph->fin;
+
     char dataKey[100] = {};
     char timestampData[20] = {};
+
+
 
     BPF_SNPRINTF(sourceIP, sizeof(sourceIP), "%d.%d.%d.%d", (iph->saddr) & 0xFF, (iph->saddr >> 8) & 0xFF, (iph->saddr >> 16) & 0xFF, (iph->saddr >> 24) & 0xFF);
     BPF_SNPRINTF(destIP, sizeof(destIP), "%d.%d.%d.%d", (iph->daddr) & 0xFF, (iph->daddr >> 8) & 0xFF, (iph->daddr >> 16) & 0xFF, (iph->daddr >> 24) & 0xFF);
@@ -69,6 +73,8 @@ int tc_egress(struct __sk_buff *ctx)
     BPF_SNPRINTF(dataKey, sizeof(dataKey), "%s,%s,%d,%d", sourceIP, destIP, tcph->source, tcph->dest);
     BPF_SNPRINTF(timestampData, sizeof(timestampData), "%llu", timestamp);
     char oldTimestamp[100] = "";
+
+    bpf_printk("egress %d", fin);
     
     
     /*oldTimestamp =  bpf_map_lookup_elem(&egress_map, &key);

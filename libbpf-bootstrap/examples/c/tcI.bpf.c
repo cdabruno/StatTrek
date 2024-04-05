@@ -59,6 +59,10 @@ int tc_ingress(struct __sk_buff *ctx)
         return TC_ACT_OK;
 	}   */
 
+    __u8 fin = tcph->fin;
+
+    bpf_printk("ingress %d", fin);
+
     char dataKey[100] = {};
     char timestampData[20] = {};
 

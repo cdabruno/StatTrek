@@ -25,8 +25,8 @@ def get_map_ids():
     map_ids = []
 
     for m in maps:
-            if m['name'] in used_maps:
-                    map_ids.append({'id': m['id'], 'name': m['name']})
+        if m.get('name') in used_maps:
+            map_ids.append({'id': m['id'], 'name': m['name']})
     return map_ids
 
 def get_map_entries(map_id):
@@ -54,40 +54,60 @@ def hex_list_to_int(hex_list):
 formatted_maps = []
 for bpf_map in get_map_ids():
     formatted_entries = []
+    mapIdentifier = ""
     for entry in dump_map(bpf_map['id']):
-        formatted_entries.append(entry['formatted'])
-    formatted_maps.append({'name': bpf_map['name'], 'entries': formatted_entries})
+        if(entry['formatted']['key'] == 'map_identifier'):
+            mapIdentifier = entry['formatted']['value']
+        else:
+            formatted_entries.append(entry['formatted'])
+    formatted_maps.append({'name': mapIdentifier + "-" + bpf_map['name'], 'entries': formatted_entries})
 
-timestamps_hash = {}
+timestamps_hashmaps = {}
 
 for map in formatted_maps:
+    timestamps_hash = {}
     for entry in map['entries']:
-        #print(entry)
         timestamps_hash[entry['key']] = entry['value']
+    timestamps_hashmaps[map['name']] = timestamps_hash
 
-delays_map = {}
-
-#print(timestamps_hash)
+delaysMap = {}
 
 
-for key in timestamps_hash:
+for mapKey in timestamps_hashmaps:
     #print(key, int(timestamps_hash[key]))
-    split_key = key.split(",")
-    inverted_entry = split_key[1] + "," + split_key[0] + "," + split_key[3] + "," + split_key[2]
-    if(timestamps_hash.get(inverted_entry)):
-        delta_time = int(timestamps_hash[key]) - int(timestamps_hash[inverted_entry])
-        delta_time_seconds = delta_time / 1000000000
-        if(delta_time > 0):
-            delays_map[inverted_entry] = delta_time_seconds
-        else:
-            delays_map[key] = delta_time_seconds * -1
+
+    trafficDirection = ""
+
+    if("ingress" in mapKey):
+        mirrorMap = timestamps_hashmaps[mapKey.split("-")[0]+"-egress_map"]
+        trafficDirection = "ingress"
     else:
-        delays_map[key] = "DELAYED RESPONSE"
+        mirrorMap = timestamps_hashmaps[mapKey.split("-")[0]+"-ingress_map"]
+        trafficDirection = "egress"
 
-print(len(timestamps_hash))
+    for entryKey in timestamps_hashmaps[mapKey]:
+        split_key = entryKey.split(",")
+        inverted_entry = split_key[1] + "," + split_key[0] + "," + split_key[3] + "," + split_key[2]
 
-for entry in delays_map:
-    print(entry, delays_map[entry])
+        if(mirrorMap.get(inverted_entry)):
+            delta_time = int(timestamps_hashmaps[mapKey][entryKey]) - int(mirrorMap[inverted_entry])
+            delta_time_seconds = delta_time / 1000000000
+            if(delta_time > 0):
+                if(trafficDirection == "ingress"):
+                    delaysMap[mapKey.split("-")[0]+"_time_to_receive_response-"+inverted_entry] = delta_time_seconds
+                else:
+                    delaysMap[mapKey.split("-")[0]+"_time_to_deliver_response-"+inverted_entry] = delta_time_seconds
+            #else:
+            #    delaysMap[mapKey+"-"+entryKey] = delta_time_seconds * -1
+        else:
+            if(trafficDirection == "ingress"):
+                delaysMap[mapKey.split("-")[0]+"_time_to_receive_response-"+inverted_entry] = "DELAYED RESPONSE"
+            else:
+                delaysMap[mapKey.split("-")[0]+"_time_to_deliver_response-"+inverted_entry] = "DELAYED RESPONSE"
+
+
+for entry in delaysMap:
+    print(entry, delaysMap[entry])
          
         
          

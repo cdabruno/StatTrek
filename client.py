@@ -1,5 +1,4 @@
 import requests
 
-for i in (0, 100):
-    x = requests.get('http://192.168.49.2:30517/')
-    print(x.text)
+for i in range(0, 1000):
+    x = requests.get('http://192.168.49.2:32212/')

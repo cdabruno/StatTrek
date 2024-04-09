@@ -22,6 +22,11 @@ int tc_ingress(struct __sk_buff *ctx)
 	struct iphdr *iph;
     struct tcphdr *tcph;
 
+    // setup map identifier
+    char identifierId[100] = "map_identifier";
+    char identifierValue[20] = "frontend";
+    bpf_map_update_elem(&ingress_map, &identifierId, &identifierValue, BPF_ANY);
+
 	if (ctx->protocol != bpf_htons(ETH_P_IP))
 		return TC_ACT_OK;
 

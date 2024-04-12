@@ -5,6 +5,11 @@ import json
 import subprocess
 import struct
 import sys
+import time
+
+timestamp = time.clock_gettime_ns(time.CLOCK_BOOTTIME)
+print(timestamp)
+exit()
 
 def check_output_json(cmd):
     return json.loads(subprocess.check_output(cmd, shell=True).decode("utf-8"))
@@ -72,7 +77,6 @@ for map in formatted_maps:
 
 delaysMap = {}
 
-
 for mapKey in timestamps_hashmaps:
     #print(key, int(timestamps_hash[key]))
 
@@ -107,7 +111,8 @@ for mapKey in timestamps_hashmaps:
 
 
 for entry in delaysMap:
-    print(entry, delaysMap[entry])
+    splitEntry = entry.split("-")
+    print(splitEntry[0] ," | " ,splitEntry[1], " | " ,delaysMap[entry], "seconds")
          
         
          

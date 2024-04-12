@@ -1,0 +1,968 @@
+[3262675295430] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   85m          0%     1476Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    1m           4Mi             
+frontend-85c84f8b8b-rmv89   0m           1Mi             
+
+[3263752165460] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   85m          0%     1476Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    1m           4Mi             
+frontend-85c84f8b8b-rmv89   0m           1Mi             
+
+[3264829054686] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   85m          0%     1476Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    1m           4Mi             
+frontend-85c84f8b8b-rmv89   0m           1Mi             
+
+[3265905727977] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   85m          0%     1476Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    1m           4Mi             
+frontend-85c84f8b8b-rmv89   0m           1Mi             
+
+[3296341354907] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   85m          0%     1476Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    1m           4Mi             
+frontend-85c84f8b8b-rmv89   0m           1Mi             
+
+[3297416025480] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   85m          0%     1476Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    1m           4Mi             
+frontend-85c84f8b8b-rmv89   0m           1Mi             
+
+[3298490578668] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   85m          0%     1476Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    1m           4Mi             
+frontend-85c84f8b8b-rmv89   0m           1Mi             
+
+[3299566451348] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   85m          0%     1476Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    1m           4Mi             
+frontend-85c84f8b8b-rmv89   0m           1Mi             
+
+[3300644025758] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   85m          0%     1476Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    1m           4Mi             
+frontend-85c84f8b8b-rmv89   0m           1Mi             
+
+[3301719838888] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   85m          0%     1476Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    1m           4Mi             
+frontend-85c84f8b8b-rmv89   0m           1Mi             
+
+[3302795258085] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   85m          0%     1476Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    1m           4Mi             
+frontend-85c84f8b8b-rmv89   0m           1Mi             
+
+[3303871616484] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   85m          0%     1476Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    1m           4Mi             
+frontend-85c84f8b8b-rmv89   0m           1Mi             
+
+[3304947590688] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   85m          0%     1476Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    1m           4Mi             
+frontend-85c84f8b8b-rmv89   0m           1Mi             
+
+[3306022681021] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   85m          0%     1476Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    1m           4Mi             
+frontend-85c84f8b8b-rmv89   0m           1Mi             
+
+[3307099081825] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   85m          0%     1476Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    1m           4Mi             
+frontend-85c84f8b8b-rmv89   0m           1Mi             
+
+[3308176026922] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   85m          0%     1476Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    1m           4Mi             
+frontend-85c84f8b8b-rmv89   0m           1Mi             
+
+[3309250317712] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   85m          0%     1476Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    1m           4Mi             
+frontend-85c84f8b8b-rmv89   0m           1Mi             
+
+[3310327542469] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   85m          0%     1476Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    1m           4Mi             
+frontend-85c84f8b8b-rmv89   0m           1Mi             
+
+[3311404403990] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   85m          0%     1476Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    1m           4Mi             
+frontend-85c84f8b8b-rmv89   0m           1Mi             
+
+[3312480961400] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   85m          0%     1476Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    1m           4Mi             
+frontend-85c84f8b8b-rmv89   0m           1Mi             
+
+[3313559836806] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   85m          0%     1476Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    1m           4Mi             
+frontend-85c84f8b8b-rmv89   0m           1Mi             
+
+[3314641870909] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3315720023278] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3316797887783] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3317878259997] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3318954830574] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3320032022997] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3321110959129] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3322191669779] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3323270699911] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3324348025681] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3325424022752] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3326502204910] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3327580024255] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3328658593023] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3329737525943] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3330820025189] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3331898509791] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3332976939917] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3334058475681] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3335135226532] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3336212742055] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3337292022160] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3338369102843] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3339447394679] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3340526142039] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3341604019335] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3342686700813] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3343765316568] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3344853673390] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3345933780339] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3347010414973] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3348087619590] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3349166143968] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3350244025861] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3351321660101] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3352404022433] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3353482751478] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3354565612168] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3355644024044] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3356720025370] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3357798622526] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3358878180583] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3359957055475] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3361035640094] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3362118624176] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3363196019536] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3364274777398] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3365352022339] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3366432205254] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3367507020150] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3368581644901] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3369656138378] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3370732022553] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3371806251869] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3372882202714] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   127m         1%     1484Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    14m          11Mi            
+frontend-85c84f8b8b-rmv89   20m          4Mi             
+
+[3373956026508] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   617m         5%     1498Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    47m          14Mi            
+frontend-85c84f8b8b-rmv89   372m         10Mi            
+
+[3375030711786] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   617m         5%     1498Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    47m          14Mi            
+frontend-85c84f8b8b-rmv89   372m         10Mi            
+
+[3376106209805] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   617m         5%     1498Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    47m          14Mi            
+frontend-85c84f8b8b-rmv89   372m         10Mi            
+
+[3377180026063] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   617m         5%     1498Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    47m          14Mi            
+frontend-85c84f8b8b-rmv89   372m         10Mi            
+
+[3378256209609] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   617m         5%     1498Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    47m          14Mi            
+frontend-85c84f8b8b-rmv89   372m         10Mi            
+
+[3379331146104] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   617m         5%     1498Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    47m          14Mi            
+frontend-85c84f8b8b-rmv89   372m         10Mi            
+
+[3380406225852] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   617m         5%     1498Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    47m          14Mi            
+frontend-85c84f8b8b-rmv89   372m         10Mi            
+
+[3381483240879] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   617m         5%     1498Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    47m          14Mi            
+frontend-85c84f8b8b-rmv89   372m         10Mi            
+
+[3382557182749] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   617m         5%     1498Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    47m          14Mi            
+frontend-85c84f8b8b-rmv89   372m         10Mi            
+
+[3383634332035] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   617m         5%     1498Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    47m          14Mi            
+frontend-85c84f8b8b-rmv89   372m         10Mi            
+
+[3384710316488] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   617m         5%     1498Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    47m          14Mi            
+frontend-85c84f8b8b-rmv89   372m         10Mi            
+
+[3385787114613] - Node snapshot
+
+NodeConsumption
+NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+minikube   617m         5%     1498Mi          4%        
+
+PodsConsumption
+NAME                        CPU(cores)   MEMORY(bytes)   
+backend-7f5b7998b9-h2qrq    47m          14Mi            
+frontend-85c84f8b8b-rmv89   372m         10Mi            
+

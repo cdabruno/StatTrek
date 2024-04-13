@@ -3,13 +3,8 @@
 
 import json
 import subprocess
-import struct
-import sys
-import time
-
-timestamp = time.clock_gettime_ns(time.CLOCK_BOOTTIME)
-print(timestamp)
-exit()
+from tabulate import tabulate
+import re
 
 def check_output_json(cmd):
     return json.loads(subprocess.check_output(cmd, shell=True).decode("utf-8"))
@@ -56,6 +51,52 @@ def hex_list_to_int(hex_list):
     hex_str = ''.join([byte.replace('0x', '') for byte in hex_list])
     return (int.from_bytes(bytes.fromhex(hex_str), byteorder='little'))
 
+# capture service proxies to simplify distributed system architecture
+services = {}
+serviceOutput = subprocess.check_output("kubectl get services", shell=True).decode("utf-8").split("\n")[1:]
+
+ipRegex = re.compile(r'[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
+portRegex = re.compile(r'[0-9]+[^ ]*/TCP')
+
+for serviceEntry in serviceOutput:
+    if(serviceEntry):
+        serviceIP = re.findall(ipRegex, serviceEntry)
+        servicePort = re.findall(portRegex, serviceEntry)
+        services[serviceEntry.split(" ")[0]] = {'ip': serviceIP[0], 'port': servicePort[0].replace(":", "/").split("/")[0]}
+
+#print(services)
+#exit()
+
+# map service IPs to pod IPs and vice-versa for posterior mapping
+serviceEndpointsMap = {}
+
+preProcessedEndpoints = subprocess.check_output("kubectl get endpoints frontend", shell=True).decode("utf-8").split("\n")[1:]
+addressRegex = re.compile(r'[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+')
+processedEndpoints = []
+for preProcessedEndpoint in preProcessedEndpoints:
+    processedEndpoint = re.findall(addressRegex, preProcessedEndpoint)
+    if(processedEndpoint):
+        processedEndpoints.append(processedEndpoint[0])
+
+serviceEndpointsMap['frontend'] = processedEndpoints
+
+preProcessedEndpoints = subprocess.check_output("kubectl get endpoints hello", shell=True).decode("utf-8").split("\n")[1:]
+addressRegex = re.compile(r'[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+')
+processedEndpoints = []
+for preProcessedEndpoint in preProcessedEndpoints:
+    processedEndpoint = re.findall(addressRegex, preProcessedEndpoint)
+    if(processedEndpoint):
+        processedEndpoints.append(processedEndpoint[0])
+
+serviceEndpointsMap['backend'] = processedEndpoints
+        
+#print(serviceEndpointsMap)
+#exit()
+serviceToPodsMap = {}
+podsToServiceMap = {}
+
+
+
 formatted_maps = []
 for bpf_map in get_map_ids():
     formatted_entries = []
@@ -77,8 +118,10 @@ for map in formatted_maps:
 
 delaysMap = {}
 
+
+
 for mapKey in timestamps_hashmaps:
-    #print(key, int(timestamps_hash[key]))
+    #print(timestamps_hashmaps[mapKey])
 
     trafficDirection = ""
 
@@ -102,17 +145,26 @@ for mapKey in timestamps_hashmaps:
                 else:
                     delaysMap[mapKey.split("-")[0]+"_time_to_deliver_response-"+inverted_entry] = delta_time_seconds
             #else:
-            #    delaysMap[mapKey+"-"+entryKey] = delta_time_seconds * -1
+            #    delaysMap[mapKey+"-"minikube mount $HOME:/host+entryKey] = delta_time_seconds * -1
         else:
             if(trafficDirection == "ingress"):
-                delaysMap[mapKey.split("-")[0]+"_time_to_receive_response-"+inverted_entry] = "DELAYED RESPONSE"
+                delaysMap[mapKey.split("-")[0]+"_no_returned_response-"+inverted_entry] = "DELAYED RESPONSE"
             else:
-                delaysMap[mapKey.split("-")[0]+"_time_to_deliver_response-"+inverted_entry] = "DELAYED RESPONSE"
+                delaysMap[mapKey.split("-")[0]+"_no_received_response-"+inverted_entry] = "DELAYED RESPONSE"
 
+entries = []
 
 for entry in delaysMap:
     splitEntry = entry.split("-")
-    print(splitEntry[0] ," | " ,splitEntry[1], " | " ,delaysMap[entry], "seconds")
+    ipsAndPorts = splitEntry[1].split(",")
+    originIp = ipsAndPorts[0]
+    originPort = ipsAndPorts[2]
+    destinyIp = ipsAndPorts[1]
+    destinyPort = ipsAndPorts[3]
+    entries.append([splitEntry[0], originIp, originPort, destinyIp, destinyPort, delaysMap[entry]])
+
+
+print(tabulate(entries, headers=['Code', 'Origin IP', 'Origin Port', 'Destiny IP', 'Destiny Port', 'Timeframe']))
          
         
          

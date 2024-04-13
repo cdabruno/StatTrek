@@ -14,7 +14,7 @@ struct {
 } egress_map SEC(".maps");
 
 SEC("tc")
-int tc_egress(struct __sk_buff *ctx)
+int tc_egress1(struct __sk_buff *ctx)
 {
 	void *data_end = (void *)(__u64)ctx->data_end;
 	void *data = (void *)(__u64)ctx->data;
@@ -65,29 +65,35 @@ int tc_egress(struct __sk_buff *ctx)
         return TC_ACT_OK;
 	}   */
 
-    __u8 fin = tcph->fin;
 
-    char dataKey[100] = {};
+    char firstDataKey[100] = {};
+    char lastDataKey[100] = {};
     char timestampData[20] = {};
 
 
 
     BPF_SNPRINTF(sourceIP, sizeof(sourceIP), "%d.%d.%d.%d", (iph->saddr) & 0xFF, (iph->saddr >> 8) & 0xFF, (iph->saddr >> 16) & 0xFF, (iph->saddr >> 24) & 0xFF);
     BPF_SNPRINTF(destIP, sizeof(destIP), "%d.%d.%d.%d", (iph->daddr) & 0xFF, (iph->daddr >> 8) & 0xFF, (iph->daddr >> 16) & 0xFF, (iph->daddr >> 24) & 0xFF);
-    
-    BPF_SNPRINTF(dataKey, sizeof(dataKey), "%s,%s,%d,%d", sourceIP, destIP, tcph->source, tcph->dest);
+
     BPF_SNPRINTF(timestampData, sizeof(timestampData), "%llu", timestamp);
     char oldTimestamp[100] = "";
+    
+    
 
-    bpf_printk("egress %d", fin);
-    
-    
     /*oldTimestamp =  bpf_map_lookup_elem(&egress_map, &key);
     if(oldTimestamp){
         bpf_printk("Old timestamp: %s", oldTimestamp);
     }*/
+    BPF_SNPRINTF(firstDataKey, sizeof(firstDataKey), "%s,%s,%d,%d-f", sourceIP, destIP, tcph->source, tcph->dest);
+    BPF_SNPRINTF(lastDataKey, sizeof(lastDataKey), "%s,%s,%d,%d-l", sourceIP, destIP, tcph->source, tcph->dest);
 
-    bpf_map_update_elem(&egress_map, &dataKey, &timestampData, BPF_ANY);/*
+    if(bpf_map_lookup_elem(&egress_map, &firstDataKey) == NULL){
+        bpf_map_update_elem(&egress_map, &firstDataKey, &timestampData, BPF_ANY);
+    }
+
+    bpf_map_update_elem(&egress_map, &lastDataKey, &timestampData, BPF_ANY);
+
+
 
 
 /*

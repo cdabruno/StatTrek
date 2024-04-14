@@ -76,8 +76,8 @@ int tc_ingress1(struct __sk_buff *ctx)
     BPF_SNPRINTF(timestampData, sizeof(timestampData), "%llu", timestamp);
     char oldTimestamp[100] = "";
  
-    BPF_SNPRINTF(firstDataKey, sizeof(firstDataKey), "%s,%s,%d,%d-f", sourceIP, destIP, tcph->source, tcph->dest);
-    BPF_SNPRINTF(lastDataKey, sizeof(lastDataKey), "%s,%s,%d,%d-l", sourceIP, destIP, tcph->source, tcph->dest);
+    BPF_SNPRINTF(firstDataKey, sizeof(firstDataKey), "%s,%s,%d,%d;f", sourceIP, destIP, tcph->source, tcph->dest);
+    BPF_SNPRINTF(lastDataKey, sizeof(lastDataKey), "%s,%s,%d,%d;l", sourceIP, destIP, tcph->source, tcph->dest);
 
     if(bpf_map_lookup_elem(&ingress_map, &firstDataKey) == NULL){
         bpf_map_update_elem(&ingress_map, &firstDataKey, &timestampData, BPF_ANY);

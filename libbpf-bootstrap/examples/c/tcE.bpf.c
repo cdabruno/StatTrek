@@ -84,8 +84,8 @@ int tc_egress1(struct __sk_buff *ctx)
     if(oldTimestamp){
         bpf_printk("Old timestamp: %s", oldTimestamp);
     }*/
-    BPF_SNPRINTF(firstDataKey, sizeof(firstDataKey), "%s,%s,%d,%d-f", sourceIP, destIP, tcph->source, tcph->dest);
-    BPF_SNPRINTF(lastDataKey, sizeof(lastDataKey), "%s,%s,%d,%d-l", sourceIP, destIP, tcph->source, tcph->dest);
+    BPF_SNPRINTF(firstDataKey, sizeof(firstDataKey), "%s,%s,%d,%d;f", sourceIP, destIP, tcph->source, tcph->dest);
+    BPF_SNPRINTF(lastDataKey, sizeof(lastDataKey), "%s,%s,%d,%d;l", sourceIP, destIP, tcph->source, tcph->dest);
 
     if(bpf_map_lookup_elem(&egress_map, &firstDataKey) == NULL){
         bpf_map_update_elem(&egress_map, &firstDataKey, &timestampData, BPF_ANY);

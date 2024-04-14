@@ -59,10 +59,10 @@ ipRegex = re.compile(r'[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
 portRegex = re.compile(r'[0-9]+[^ ]*/TCP')
 
 for serviceEntry in serviceOutput:
-    if(serviceEntry):
+    if(serviceEntry and serviceEntry.split(" ")[0] != "kubernetes"):
         serviceIP = re.findall(ipRegex, serviceEntry)
         servicePort = re.findall(portRegex, serviceEntry)
-        services[serviceEntry.split(" ")[0]] = {'ip': serviceIP[0], 'port': servicePort[0].replace(":", "/").split("/")[0]}
+        services[serviceEntry.split(" ")[0]] = serviceIP[0]+":204"+servicePort[0].replace(":", "/").split("/")[0]
 
 #print(services)
 #exit()
@@ -70,30 +70,20 @@ for serviceEntry in serviceOutput:
 # map service IPs to pod IPs and vice-versa for posterior mapping
 serviceEndpointsMap = {}
 
-preProcessedEndpoints = subprocess.check_output("kubectl get endpoints frontend", shell=True).decode("utf-8").split("\n")[1:]
 addressRegex = re.compile(r'[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+')
-processedEndpoints = []
-for preProcessedEndpoint in preProcessedEndpoints:
-    processedEndpoint = re.findall(addressRegex, preProcessedEndpoint)
-    if(processedEndpoint):
-        processedEndpoints.append(processedEndpoint[0])
 
-serviceEndpointsMap['frontend'] = processedEndpoints
+for serviceKey in services:
 
-preProcessedEndpoints = subprocess.check_output("kubectl get endpoints hello", shell=True).decode("utf-8").split("\n")[1:]
-addressRegex = re.compile(r'[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+')
-processedEndpoints = []
-for preProcessedEndpoint in preProcessedEndpoints:
-    processedEndpoint = re.findall(addressRegex, preProcessedEndpoint)
-    if(processedEndpoint):
-        processedEndpoints.append(processedEndpoint[0])
+    preProcessedEndpoints = subprocess.check_output("kubectl get endpoints "+serviceKey, shell=True).decode("utf-8").split("\n")[1:]
 
-serviceEndpointsMap['backend'] = processedEndpoints
+    for preProcessedEndpoint in preProcessedEndpoints:
+        processedEndpoint = re.findall(addressRegex, preProcessedEndpoint)
+        if(processedEndpoint):
+            endpointAttributes = processedEndpoint[0].split(":")
+            serviceEndpointsMap[services[serviceKey]] = endpointAttributes[0]+":204"+endpointAttributes[1]
         
-#print(serviceEndpointsMap)
+print(serviceEndpointsMap)
 #exit()
-serviceToPodsMap = {}
-podsToServiceMap = {}
 
 
 
@@ -113,8 +103,29 @@ timestamps_hashmaps = {}
 for map in formatted_maps:
     timestamps_hash = {}
     for entry in map['entries']:
-        timestamps_hash[entry['key']] = entry['value']
+
+        addressAndTimetag = entry["key"].split(";")
+        ipsAndPorts = addressAndTimetag[0].split(",")
+        originIp = ipsAndPorts[0]
+        originPort = ipsAndPorts[2]
+        destinyIp = ipsAndPorts[1]
+        destinyPort = ipsAndPorts[3]
+
+        bypassOriginService = serviceEndpointsMap.get(":".join([originIp, originPort]))
+        if(bypassOriginService):
+            originIp = bypassOriginService.split(":")[0]
+            originPort = bypassOriginService.split(":")[1]
+
+        bypassDestinyService = serviceEndpointsMap.get(":".join([destinyIp, destinyPort]))
+        if(bypassDestinyService):
+            destinyIp = bypassDestinyService.split(":")[0]
+            destinyPort = bypassDestinyService.split(":")[1]
+
+        timestamps_hash[";".join([",".join([originIp,destinyIp,originPort,destinyPort]), addressAndTimetag[1]])] = entry['value']
     timestamps_hashmaps[map['name']] = timestamps_hash
+
+#print(timestamps_hashmaps)
+#exit()
 
 delaysMap = {}
 
@@ -122,6 +133,7 @@ delaysMap = {}
 
 for mapKey in timestamps_hashmaps:
     #print(timestamps_hashmaps[mapKey])
+    
 
     trafficDirection = ""
 
@@ -133,8 +145,9 @@ for mapKey in timestamps_hashmaps:
         trafficDirection = "egress"
 
     for entryKey in timestamps_hashmaps[mapKey]:
-        split_key = entryKey.split(",")
-        inverted_entry = split_key[1] + "," + split_key[0] + "," + split_key[3] + "," + split_key[2]
+        keyAddressAndTimetag = entryKey.split(";")
+        split_key = keyAddressAndTimetag[0].split(",")
+        inverted_entry = split_key[1] + "," + split_key[0] + "," + split_key[3] + "," + split_key[2] + ";" + keyAddressAndTimetag[1]
 
         if(mirrorMap.get(inverted_entry)):
             delta_time = int(timestamps_hashmaps[mapKey][entryKey]) - int(mirrorMap[inverted_entry])
@@ -155,13 +168,14 @@ for mapKey in timestamps_hashmaps:
 entries = []
 
 for entry in delaysMap:
-    splitEntry = entry.split("-")
-    ipsAndPorts = splitEntry[1].split(",")
+    addressAndTimetag = entry.split(";")
+    code = addressAndTimetag[0].split("-")[0]
+    ipsAndPorts = addressAndTimetag[0].split("-")[1].split(",")
     originIp = ipsAndPorts[0]
     originPort = ipsAndPorts[2]
     destinyIp = ipsAndPorts[1]
     destinyPort = ipsAndPorts[3]
-    entries.append([splitEntry[0], originIp, originPort, destinyIp, destinyPort, delaysMap[entry]])
+    entries.append([code, originIp, originPort, destinyIp, destinyPort, delaysMap[entry]])
 
 
 print(tabulate(entries, headers=['Code', 'Origin IP', 'Origin Port', 'Destiny IP', 'Destiny Port', 'Timeframe']))

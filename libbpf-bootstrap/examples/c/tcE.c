@@ -5,7 +5,7 @@
 #include "tcE.skel.h"
 
 // network interface hook
-#define LO_IFINDEX 5
+#define LO_IFINDEX 10
 
 static volatile sig_atomic_t exiting = 0;
 
@@ -49,7 +49,7 @@ int main(int argc, char **argv)
 		goto cleanup;
 	}
 
-	tcE_opts.prog_fd = bpf_program__fd(skel->progs.tc_egress1);
+	tcE_opts.prog_fd = bpf_program__fd(skel->progs.tc_egress);
 	err = bpf_tc_attach(&tcE_hook, &tcE_opts);
 	if (err) {
 		fprintf(stderr, "Failed to attach TC: %d\n", err);

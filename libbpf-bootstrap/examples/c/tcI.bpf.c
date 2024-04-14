@@ -14,7 +14,7 @@ struct {
 } ingress_map SEC(".maps");
 
 SEC("tc")
-int tc_ingress1(struct __sk_buff *ctx)
+int tc_ingress(struct __sk_buff *ctx)
 {
 	void *data_end = (void *)(__u64)ctx->data_end;
 	void *data = (void *)(__u64)ctx->data;
@@ -24,7 +24,7 @@ int tc_ingress1(struct __sk_buff *ctx)
 
     // setup map identifier
     char identifierId[100] = "map_identifier";
-    char identifierValue[20] = "frontend";
+    char identifierValue[20] = "hello";
     bpf_map_update_elem(&ingress_map, &identifierId, &identifierValue, BPF_ANY);
 
 	if (ctx->protocol != bpf_htons(ETH_P_IP))

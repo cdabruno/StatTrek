@@ -67,8 +67,9 @@ for serviceEntry in serviceOutput:
 #print(services)
 #exit()
 
-# map service IPs to pod IPs and vice-versa for posterior mapping
+# map service IPs to pod IPs and vice-versa for posterior mapping (service cluster address bypassing)
 serviceEndpointsMap = {}
+ipToService = {}
 
 addressRegex = re.compile(r'[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+')
 
@@ -81,12 +82,13 @@ for serviceKey in services:
         if(processedEndpoint):
             endpointAttributes = processedEndpoint[0].split(":")
             serviceEndpointsMap[services[serviceKey]] = endpointAttributes[0]+":204"+endpointAttributes[1]
+            ipToService[processedEndpoint[0].split(":")[0]] = serviceKey
         
-print(serviceEndpointsMap)
+#print(ipToService)
 #exit()
 
 
-
+# format entries from bpf map
 formatted_maps = []
 for bpf_map in get_map_ids():
     formatted_entries = []
@@ -100,6 +102,7 @@ for bpf_map in get_map_ids():
 
 timestamps_hashmaps = {}
 
+# setup service cluster addresses bypass
 for map in formatted_maps:
     timestamps_hash = {}
     for entry in map['entries']:
@@ -129,11 +132,10 @@ for map in formatted_maps:
 
 delaysMap = {}
 
+#print(timestamps_hashmaps)
 
-
-for mapKey in timestamps_hashmaps:
-    #print(timestamps_hashmaps[mapKey])
-    
+# request timeframe analysis
+for mapKey in timestamps_hashmaps:    
 
     trafficDirection = ""
 
@@ -145,8 +147,20 @@ for mapKey in timestamps_hashmaps:
         trafficDirection = "egress"
 
     for entryKey in timestamps_hashmaps[mapKey]:
+
+        if(entryKey[-1] =="l"):
+            continue
+
         keyAddressAndTimetag = entryKey.split(";")
         split_key = keyAddressAndTimetag[0].split(",")
+
+        if(trafficDirection == "ingress"):
+            print(ipToService)
+            originService = ipToService[split_key[0]]
+            print(entryKey)
+            print(originService)
+            exit()
+
         inverted_entry = split_key[1] + "," + split_key[0] + "," + split_key[3] + "," + split_key[2] + ";" + keyAddressAndTimetag[1]
 
         if(mirrorMap.get(inverted_entry)):

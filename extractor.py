@@ -51,6 +51,8 @@ def hex_list_to_int(hex_list):
     hex_str = ''.join([byte.replace('0x', '') for byte in hex_list])
     return (int.from_bytes(bytes.fromhex(hex_str), byteorder='little'))
 
+names = ["frontend", "hello"]
+
 # capture service proxies to simplify distributed system architecture
 services = {}
 serviceOutput = subprocess.check_output("kubectl get services", shell=True).decode("utf-8").split("\n")[1:]
@@ -81,8 +83,8 @@ for serviceKey in services:
         processedEndpoint = re.findall(addressRegex, preProcessedEndpoint)
         if(processedEndpoint):
             endpointAttributes = processedEndpoint[0].split(":")
-            serviceEndpointsMap[services[serviceKey]] = endpointAttributes[0]+":204"+endpointAttributes[1]
-            ipToService[processedEndpoint[0].split(":")[0]] = serviceKey
+            serviceEndpointsMap[services[serviceKey].replace("hello", "backend")] = endpointAttributes[0]+":204"+endpointAttributes[1]
+            ipToService[processedEndpoint[0].split(":")[0]] = serviceKey.replace("hello", "backend")
         
 #print(ipToService)
 #exit()
@@ -134,52 +136,118 @@ delaysMap = {}
 
 #print(timestamps_hashmaps)
 
+# fix inverted entries
+for mapKey in timestamps_hashmaps:
+
+    trafficDirection = ""
+    currService = mapKey.split("-")[0]
+    if("ingress" in mapKey):
+        trafficDirection = "ingress"
+    else:
+        trafficDirection = "egress"
+
+    for entryKey in list(timestamps_hashmaps[mapKey].keys()): 
+
+        keyAddressAndTimetag = entryKey.split(";")
+        split_key = keyAddressAndTimetag[0].split(",")
+        inverted_entry = split_key[1] + "," + split_key[0] + "," + split_key[3] + "," + split_key[2] + ";" + keyAddressAndTimetag[1]
+
+        if(trafficDirection == "ingress"):
+            if(ipToService.get(split_key[0]) == currService):
+                timestamps_hashmaps[mapKey][inverted_entry] = timestamps_hashmaps[mapKey][entryKey]
+                del timestamps_hashmaps[mapKey][entryKey]
+        if(trafficDirection == "egress"):
+            if(ipToService.get(split_key[1]) == currService):
+                timestamps_hashmaps[mapKey][inverted_entry] = timestamps_hashmaps[mapKey][entryKey]
+                del timestamps_hashmaps[mapKey][entryKey]
+
+
 # request timeframe analysis
 for mapKey in timestamps_hashmaps:    
 
     trafficDirection = ""
+    currService = mapKey.split("-")[0]
 
     if("ingress" in mapKey):
-        mirrorMap = timestamps_hashmaps[mapKey.split("-")[0]+"-egress_map"]
+        #mirrorMap = timestamps_hashmaps[currService+"-egress_map"]
         trafficDirection = "ingress"
     else:
-        mirrorMap = timestamps_hashmaps[mapKey.split("-")[0]+"-ingress_map"]
+        #mirrorMap = timestamps_hashmaps[currService+"-ingress_map"]
         trafficDirection = "egress"
 
-    for entryKey in timestamps_hashmaps[mapKey]:
+    if(trafficDirection == "ingress"):
+        continue
 
-        if(entryKey[-1] =="l"):
+    
+
+    for entryKey in timestamps_hashmaps[mapKey].keys():
+
+        if(entryKey[-1] == "l" or not (ipToService.get(entryKey.split(",")[0]) == currService)):
             continue
 
         keyAddressAndTimetag = entryKey.split(";")
         split_key = keyAddressAndTimetag[0].split(",")
 
-        if(trafficDirection == "ingress"):
-            print(ipToService)
-            originService = ipToService[split_key[0]]
-            print(entryKey)
-            print(originService)
-            exit()
+        contactedService = ipToService.get(split_key[1])
 
+        if(not contactedService):
+            continue
+            
         inverted_entry = split_key[1] + "," + split_key[0] + "," + split_key[3] + "," + split_key[2] + ";" + keyAddressAndTimetag[1]
 
-        if(mirrorMap.get(inverted_entry)):
-            delta_time = int(timestamps_hashmaps[mapKey][entryKey]) - int(mirrorMap[inverted_entry])
-            delta_time_seconds = delta_time / 1000000000
-            if(delta_time > 0):
-                if(trafficDirection == "ingress"):
-                    delaysMap[mapKey.split("-")[0]+"_time_to_receive_response-"+inverted_entry] = delta_time_seconds
-                else:
-                    delaysMap[mapKey.split("-")[0]+"_time_to_deliver_response-"+inverted_entry] = delta_time_seconds
+        currentKey = entryKey
+        contactedKey = inverted_entry
+
+        currServiceEgressMap = timestamps_hashmaps[currService+"-egress_map"]
+        contactedServiceEgressMap = timestamps_hashmaps[contactedService+"-egress_map"]
+
+        currServiceIngressMap = timestamps_hashmaps[currService+"-ingress_map"]
+        contactedServiceIngressMap = timestamps_hashmaps[contactedService+"-ingress_map"]
+
+        currServiceInitialTimestamp = currServiceEgressMap.get(entryKey)
+
+        #print(timestamps_hashmaps)
+
+        #print(currentKey)
+        #print(contactedKey)
+        #print(currServiceEgressMap)
+        #print(contactedServiceEgressMap)
+
+
+        oppositeInitalTimestamp = contactedServiceEgressMap.get(contactedKey)
+        oppositeInitialTimestampKey = contactedKey
+
+        if(int(oppositeInitalTimestamp) - int(currServiceInitialTimestamp) > 0):
+            #weird
+            delaysMap[contactedService+"_request_to_"+currService+"-"+entryKey] = (int(contactedServiceEgressMap.get(oppositeInitialTimestampKey.replace("f", "l"))) - int(currServiceInitialTimestamp)) / 1000000000
+            print(currServiceEgressMap)
+            print(contactedKey.replace("f", "l"))
+            delaysMap[currService+"_time_to_process_response_to_"+contactedService+"-"+entryKey] = (int(contactedServiceEgressMap.get(oppositeInitialTimestampKey.replace("f", "l"))) - int(contactedServiceIngressMap.get(entryKey))) / 1000000000
+        else:
+            delaysMap[currService+"_request_to_"+contactedService+"-"+entryKey] = (int(currServiceEgressMap.get(entryKey.replace("f", "l"))) - int(contactedServiceEgressMap.get(oppositeInitialTimestampKey))) / 1000000000
+
+        #print(delaysMap)
+        #exit()
+
+        #if(mirrorMap.get(inverted_entry)):
+         #   delta_time = int(timestamps_hashmaps[mapKey][entryKey]) - int(mirrorMap[inverted_entry])
+          #  delta_time_seconds = delta_time / 1000000000
+           # if(delta_time > 0):
+            #    if(trafficDirection == "ingress"):
+             #       delaysMap[mapKey.split("-")[0]+"_time_to_receive_response-"+inverted_entry] = delta_time_seconds
+              #  else:
+               #     delaysMap[mapKey.split("-")[0]+"_time_to_deliver_response-"+inverted_entry] = delta_time_seconds
             #else:
             #    delaysMap[mapKey+"-"minikube mount $HOME:/host+entryKey] = delta_time_seconds * -1
-        else:
-            if(trafficDirection == "ingress"):
-                delaysMap[mapKey.split("-")[0]+"_no_returned_response-"+inverted_entry] = "DELAYED RESPONSE"
-            else:
-                delaysMap[mapKey.split("-")[0]+"_no_received_response-"+inverted_entry] = "DELAYED RESPONSE"
+        #else:
+         #   if(trafficDirection == "ingress"):
+          #      delaysMap[mapKey.split("-")[0]+"_no_returned_response-"+inverted_entry] = "DELAYED RESPONSE"
+           # else:
+            #    delaysMap[mapKey.split("-")[0]+"_no_received_response-"+inverted_entry] = "DELAYED RESPONSE"
 
 entries = []
+
+#print(delaysMap)
 
 for entry in delaysMap:
     addressAndTimetag = entry.split(";")

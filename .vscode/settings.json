@@ -2,6 +2,8 @@
     "files.associations": {
         "unistd.h": "c",
         "signal.h": "c",
-        "bpf_helpers.h": "c"
+        "bpf_helpers.h": "c",
+        "cinttypes": "c",
+        "bpf_endian.h": "c"
     }
 }

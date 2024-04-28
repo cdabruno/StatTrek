@@ -24,7 +24,7 @@ int tc_ingress(struct __sk_buff *ctx)
 
     // setup map identifier
     char identifierId[100] = "map_identifier";
-    char identifierValue[20] = "backend";
+    char identifierValue[20] = "middleware";
     bpf_map_update_elem(&ingress_map, &identifierId, &identifierValue, BPF_ANY);
 
 	if (ctx->protocol != bpf_htons(ETH_P_IP))
@@ -39,6 +39,10 @@ int tc_ingress(struct __sk_buff *ctx)
 		return TC_ACT_OK;
     tcph = data + sizeof(*eth) + sizeof(*iph);
     if ((void *)tcph + sizeof(*tcph) > data_end) {
+        return TC_ACT_OK;
+    }
+
+    if(tcph->fin){
         return TC_ACT_OK;
     }
 
@@ -83,7 +87,35 @@ int tc_ingress(struct __sk_buff *ctx)
         bpf_map_update_elem(&ingress_map, &firstDataKey, &timestampData, BPF_ANY);
     }
 
-    bpf_map_update_elem(&ingress_map, &lastDataKey, &timestampData, BPF_ANY);
+    char* lastTimestampChar = bpf_map_lookup_elem(&ingress_map, &lastDataKey);
+
+    if(lastTimestampChar != NULL){
+
+        u64 lastTimestamp = 0;
+
+        for(int i = 0; i < 20; i++){
+            if(lastTimestampChar[i] >= 48 && lastTimestampChar[i] <= 57){
+                lastTimestamp = lastTimestamp * 10;
+                lastTimestamp += lastTimestampChar[i] - 48;
+            }
+        }
+        u64 difference = timestamp - lastTimestamp;
+
+
+        if(difference < 5000000000){
+            bpf_printk("last timestamp: %llu", &lastTimestamp);
+            bpf_printk("current timestamp: %llu", &timestamp);
+            bpf_printk("difference: %llu", &difference);
+            bpf_map_update_elem(&ingress_map, &lastDataKey, &timestampData, BPF_ANY);
+        }
+        else{
+            bpf_printk("caught late packet");
+        }
+    }
+    else{
+        bpf_map_update_elem(&ingress_map, &lastDataKey, &timestampData, BPF_ANY);
+    }
+
     
     //char dummy[15] = "111.111.111.111,111.111.111.111,321,123";
     /*oldTimestamp =  bpf_map_lookup_elem(&ingress_map, &key);

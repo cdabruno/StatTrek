@@ -1,9 +1,6 @@
-import json
 import subprocess
-import struct
-import sys
 
-service = "frontend"
+service = "middleware"
 
 cmd = "docker ps | grep -i " + service
 output1 = subprocess.check_output(cmd, shell=True).decode("utf-8")
@@ -18,7 +15,7 @@ output3 = subprocess.check_output(cmd, shell=True).decode("utf-8")
 output3Parse = output3.split(": ")[1]
 print(service + " " + output3Parse)
 
-service = "backend"
+service = "database"
 
 cmd = "docker ps | grep -i " + service
 output1 = subprocess.check_output(cmd, shell=True).decode("utf-8")

@@ -4,8 +4,8 @@ import json
 
 metricsOutput = open("nodeMetrics.txt", "a")  # append mode
 
-minikubeConsumption = subprocess.check_output("minikube ssh && top", shell=True).decode("utf-8")
-exit()
+#minikubeConsumption = subprocess.check_output("minikube ssh && top", shell=True).decode("utf-8")
+#exit()
 
 while(True):
     # data capture

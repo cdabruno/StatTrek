@@ -37,3 +37,5 @@ minikube mount $HOME:/host                               - mount local files in 
 docker ps | grep -i <service-id>                             - get container for given pod
 docker inspect <container-id> | grep -i sandboxkey         - get container sandboxkey
 sudo nsenter --net=/var/run/docker/netns/47713f1e42ef ethtool -S eth0 | grep -i peer       - get veth id in node net interfaces
+
+sudo -E /bin/python /home/bruno/Documents/StatTrek/extractor.py    -- run python with libraries

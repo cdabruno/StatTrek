@@ -51,7 +51,7 @@ def hex_list_to_int(hex_list):
     hex_str = ''.join([byte.replace('0x', '') for byte in hex_list])
     return (int.from_bytes(bytes.fromhex(hex_str), byteorder='little'))
 
-names = ["frontend", "hello"]
+names = ["middleware", "database"]
 
 # capture service proxies to simplify distributed system architecture
 services = {}
@@ -64,10 +64,7 @@ for serviceEntry in serviceOutput:
     if(serviceEntry and serviceEntry.split(" ")[0] != "kubernetes"):
         serviceIP = re.findall(ipRegex, serviceEntry)
         servicePort = re.findall(portRegex, serviceEntry)
-        services[serviceEntry.split(" ")[0]] = serviceIP[0]+":204"+servicePort[0].replace(":", "/").split("/")[0]
-
-#print(services)
-#exit()
+        services[serviceEntry.split(" ")[0]] = serviceIP[0]
 
 # map service IPs to pod IPs and vice-versa for posterior mapping (service cluster address bypassing)
 serviceEndpointsMap = {}
@@ -83,10 +80,11 @@ for serviceKey in services:
         processedEndpoint = re.findall(addressRegex, preProcessedEndpoint)
         if(processedEndpoint):
             endpointAttributes = processedEndpoint[0].split(":")
-            serviceEndpointsMap[services[serviceKey].replace("hello", "backend")] = endpointAttributes[0]+":204"+endpointAttributes[1]
-            ipToService[processedEndpoint[0].split(":")[0]] = serviceKey.replace("hello", "backend")
+            serviceEndpointsMap[services[serviceKey]] = endpointAttributes[0]
+            ipToService[processedEndpoint[0].split(":")[0]] = serviceKey
         
 #print(ipToService)
+#print(serviceEndpointsMap)
 #exit()
 
 
@@ -116,15 +114,15 @@ for map in formatted_maps:
         destinyIp = ipsAndPorts[1]
         destinyPort = ipsAndPorts[3]
 
-        bypassOriginService = serviceEndpointsMap.get(":".join([originIp, originPort]))
+
+        bypassOriginService = serviceEndpointsMap.get(originIp)
+
         if(bypassOriginService):
             originIp = bypassOriginService.split(":")[0]
-            originPort = bypassOriginService.split(":")[1]
 
-        bypassDestinyService = serviceEndpointsMap.get(":".join([destinyIp, destinyPort]))
+        bypassDestinyService = serviceEndpointsMap.get(destinyIp)
         if(bypassDestinyService):
             destinyIp = bypassDestinyService.split(":")[0]
-            destinyPort = bypassDestinyService.split(":")[1]
 
         timestamps_hash[";".join([",".join([originIp,destinyIp,originPort,destinyPort]), addressAndTimetag[1]])] = entry['value']
     timestamps_hashmaps[map['name']] = timestamps_hash
@@ -201,6 +199,8 @@ for mapKey in timestamps_hashmaps:
         currServiceEgressMap = timestamps_hashmaps[currService+"-egress_map"]
         contactedServiceEgressMap = timestamps_hashmaps[contactedService+"-egress_map"]
 
+        #print(timestamps_hashmaps)
+
         currServiceIngressMap = timestamps_hashmaps[currService+"-ingress_map"]
         contactedServiceIngressMap = timestamps_hashmaps[contactedService+"-ingress_map"]
 
@@ -208,24 +208,43 @@ for mapKey in timestamps_hashmaps:
 
         #print(timestamps_hashmaps)
 
+        #print(currService)
         #print(currentKey)
         #print(contactedKey)
         #print(currServiceEgressMap)
         #print(contactedServiceEgressMap)
 
-
+        
         oppositeInitalTimestamp = contactedServiceEgressMap.get(contactedKey)
         oppositeInitialTimestampKey = contactedKey
 
-        if(int(oppositeInitalTimestamp) - int(currServiceInitialTimestamp) > 0):
-            #weird
-            delaysMap[contactedService+"_request_to_"+currService+"-"+entryKey] = (int(contactedServiceEgressMap.get(oppositeInitialTimestampKey.replace("f", "l"))) - int(currServiceInitialTimestamp)) / 1000000000
-            print(currServiceEgressMap)
-            print(contactedKey.replace("f", "l"))
-            delaysMap[currService+"_time_to_process_response_to_"+contactedService+"-"+entryKey] = (int(contactedServiceEgressMap.get(oppositeInitialTimestampKey.replace("f", "l"))) - int(contactedServiceIngressMap.get(entryKey))) / 1000000000
-        else:
-            delaysMap[currService+"_request_to_"+contactedService+"-"+entryKey] = (int(currServiceEgressMap.get(entryKey.replace("f", "l"))) - int(contactedServiceEgressMap.get(oppositeInitialTimestampKey))) / 1000000000
+        #print(oppositeInitalTimestamp)
+        #print(currServiceInitialTimestamp)
 
+        if(int(oppositeInitalTimestamp) - int(currServiceInitialTimestamp) > 0):
+
+            #print(currServiceEgressMap.get(entryKey))
+            #print(contactedServiceEgressMap.get(contactedKey))
+            #print(currServiceIngressMap.get(contactedKey))
+            #print(contactedServiceIngressMap.get(entryKey))
+
+            #print(currServiceIngressMap.get(contactedKey.replace("f", "l")))
+            #print(contactedServiceIngressMap.get(entryKey.replace("f", "l")))
+            #print(currServiceEgressMap.get(entryKey.replace("f", "l")))
+            #print(contactedServiceEgressMap.get(contactedKey.replace("f", "l")))
+            #exit()
+            #weird
+            #print(contactedServiceIngressMap)
+            delaysMap[contactedService+"_request_to_"+currService+"-"+contactedKey.replace("f", "").replace("l", "")] = (int(contactedServiceEgressMap.get(contactedKey.replace("f", "l"))) - int(contactedServiceIngressMap.get(entryKey))) / 1000000000
+            #print(currServiceEgressMap)
+            #print(currServiceIngressMap)
+            #print(entryKey)
+            #print()
+            #print(int(currServiceEgressMap.get(entryKey).replace("f", "l")))#10.244.0.81,10.244.0.82,14357,13472;l': '33355000207347
+            #print(int(currServiceEgressMap.get('10.244.0.81,10.244.0.82,14357,13472;l')))
+            #print(int(currServiceIngressMap.get(contactedKey)))
+            delaysMap[currService+"_time_to_process_response_to_"+contactedService+"-"+entryKey.replace("f", "").replace("l", "")] = (int(currServiceIngressMap.get(contactedKey.replace("f", "l"))) - int(currServiceEgressMap.get(entryKey))) / 1000000000
+        
         #print(delaysMap)
         #exit()
 
@@ -239,7 +258,7 @@ for mapKey in timestamps_hashmaps:
                #     delaysMap[mapKey.split("-")[0]+"_time_to_deliver_response-"+inverted_entry] = delta_time_seconds
             #else:
             #    delaysMap[mapKey+"-"minikube mount $HOME:/host+entryKey] = delta_time_seconds * -1
-        #else:
+        #else:contactedServiceEgressMap.get(oppositeInitialTimestampKey.replace("f", "l"))
          #   if(trafficDirection == "ingress"):
           #      delaysMap[mapKey.split("-")[0]+"_no_returned_response-"+inverted_entry] = "DELAYED RESPONSE"
            # else:

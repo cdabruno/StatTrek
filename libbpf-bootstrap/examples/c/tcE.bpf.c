@@ -14,7 +14,7 @@ struct {
 } egress_map SEC(".maps");
 
 SEC("tc")
-int tc_egress(struct __sk_buff *ctx)
+int tc_egress1(struct __sk_buff *ctx)
 {
 	void *data_end = (void *)(__u64)ctx->data_end;
 	void *data = (void *)(__u64)ctx->data;
@@ -24,7 +24,7 @@ int tc_egress(struct __sk_buff *ctx)
 
     // setup map identifier
     char identifierId[100] = "map_identifier";
-    char identifierValue[20] = "middleware";
+    char identifierValue[20] = "database";
     bpf_map_update_elem(&egress_map, &identifierId, &identifierValue, BPF_ANY);
 
 

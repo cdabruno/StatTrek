@@ -5,7 +5,7 @@
 #include "tcI.skel.h"
 
 // network interface hook
-#define LO_IFINDEX 7
+#define LO_IFINDEX 4
 
 static volatile sig_atomic_t exiting = 0;
 
@@ -48,7 +48,7 @@ int main(int argc, char **argv)
 		goto cleanup;
 	}
 
-	tcI_opts.prog_fd = bpf_program__fd(skel->progs.tc_ingress1);
+	tcI_opts.prog_fd = bpf_program__fd(skel->progs.tc_ingress);
 	err = bpf_tc_attach(&tcI_hook, &tcI_opts);
 	if (err) {
 		fprintf(stderr, "Failed to attach TC: %d\n", err);

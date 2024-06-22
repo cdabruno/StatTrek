@@ -218,8 +218,15 @@ for mapKey in timestamps_hashmaps:
         oppositeInitalTimestamp = contactedServiceEgressMap.get(contactedKey)
         oppositeInitialTimestampKey = contactedKey
 
+        if(oppositeInitalTimestamp == None):
+            continue
+        if(contactedServiceEgressMap.get(contactedKey.replace("f", "l")) == None):
+            continue
+
         #print(oppositeInitalTimestamp)
         #print(currServiceInitialTimestamp)
+
+    
 
         if(int(oppositeInitalTimestamp) - int(currServiceInitialTimestamp) > 0):
 
@@ -235,7 +242,8 @@ for mapKey in timestamps_hashmaps:
             #exit()
             #weird
             #print(contactedServiceIngressMap)
-            delaysMap[contactedService+"_request_to_"+currService+"-"+contactedKey.replace("f", "").replace("l", "")] = (int(contactedServiceEgressMap.get(contactedKey.replace("f", "l"))) - int(contactedServiceIngressMap.get(entryKey))) / 1000000000
+            delaysMap[contactedService+"_request_to_"+currService+"-"+contactedKey.replace("f", "").replace("l", "")] = [(int(contactedServiceEgressMap.get(contactedKey.replace("f", "l"))) - int(contactedServiceIngressMap.get(entryKey))) / 1000000000, int(contactedServiceIngressMap.get(entryKey))]
+            
             #print(currServiceEgressMap)
             #print(currServiceIngressMap)
             #print(entryKey)
@@ -243,7 +251,7 @@ for mapKey in timestamps_hashmaps:
             #print(int(currServiceEgressMap.get(entryKey).replace("f", "l")))#10.244.0.81,10.244.0.82,14357,13472;l': '33355000207347
             #print(int(currServiceEgressMap.get('10.244.0.81,10.244.0.82,14357,13472;l')))
             #print(int(currServiceIngressMap.get(contactedKey)))
-            delaysMap[currService+"_time_to_process_response_to_"+contactedService+"-"+entryKey.replace("f", "").replace("l", "")] = (int(currServiceIngressMap.get(contactedKey.replace("f", "l"))) - int(currServiceEgressMap.get(entryKey))) / 1000000000
+            delaysMap[currService+"_time_to_process_response_to_"+contactedService+"-"+entryKey.replace("f", "").replace("l", "")] = [(int(currServiceIngressMap.get(contactedKey.replace("f", "l"))) - int(currServiceEgressMap.get(entryKey))) / 1000000000, int(contactedServiceIngressMap.get(entryKey))]
         
         #print(delaysMap)
         #exit()
@@ -276,10 +284,11 @@ for entry in delaysMap:
     originPort = ipsAndPorts[2]
     destinyIp = ipsAndPorts[1]
     destinyPort = ipsAndPorts[3]
-    entries.append([code, originIp, originPort, destinyIp, destinyPort, delaysMap[entry]])
+    entries.append([code, originIp, originPort, destinyIp, destinyPort, delaysMap[entry][0], delaysMap[entry][1]])
 
+metricsOutput = open("serviceTimes.txt", "w")  # append mode
 
-print(tabulate(entries, headers=['Code', 'Origin IP', 'Origin Port', 'Destiny IP', 'Destiny Port', 'Timeframe']))
+metricsOutput.write(tabulate(entries, headers=['Code', 'OriginIP', 'OriginPort', 'DestinyIP', 'DestinyPort', 'Timeframe', 'Instant']))
          
         
          

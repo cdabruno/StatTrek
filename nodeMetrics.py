@@ -10,17 +10,16 @@ metricsOutput = open("nodeMetrics.txt", "a")  # append mode
 while(True):
     # data capture
     timestamp = time.clock_gettime_ns(time.CLOCK_BOOTTIME)
-    nodeConsumption = subprocess.check_output("kubectl top node", shell=True).decode("utf-8")
+    #nodeConsumption = subprocess.check_output("kubectl top node", shell=True).decode("utf-8")
     podConsumption = subprocess.check_output("kubectl top pods", shell=True).decode("utf-8")
 
     # data persistence
 
-    metricsOutput.write("["+str(timestamp)+"] - Node snapshot\n\n")
+    metricsOutput.write("["+str(timestamp)+"]\n")
 
-    metricsOutput.write("NodeConsumption\n")
-    metricsOutput.write(str(nodeConsumption)+"\n")
+    #metricsOutput.write("NodeConsumption\n")
+    #metricsOutput.write(str(nodeConsumption)+"\n")
 
-    metricsOutput.write("PodsConsumption\n")
     metricsOutput.write(str(podConsumption) + "\n")
     time.sleep(1)
 

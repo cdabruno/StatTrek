@@ -48,8 +48,6 @@ def main():
 
     if(args[0] == 'database'):
 
-        run_command(bash, 'rm ./libbpf-bootstrap/examples/c/tcI -f')
-        run_command(bash, 'rm ./libbpf-bootstrap/examples/c/tcE -f')
 
         # ebpf
 
@@ -94,9 +92,6 @@ def main():
             file.write(filedata)
 
     if(args[0] == 'middleware'):
-
-        run_command(bash, 'rm ./libbpf-bootstrap/examples/c/tcI -f')
-        run_command(bash, 'rm ./libbpf-bootstrap/examples/c/tcE -f')
 
         # ebpf
 
